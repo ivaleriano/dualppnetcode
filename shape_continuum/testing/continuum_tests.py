@@ -5,9 +5,8 @@ import torch
 import torch.nn.parallel
 import torch.utils.data
 from sklearn.metrics import average_precision_score, precision_recall_fscore_support, roc_auc_score
-from tqdm import tqdm
-
 from sksurv.metrics import concordance_index_censored
+from tqdm import tqdm
 
 
 def parse_args():

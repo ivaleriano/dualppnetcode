@@ -6,12 +6,12 @@ import os
 import torch
 import torch.nn.parallel
 import torch.utils.data
+from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
 from shape_continuum.data_utils.ADNIDataLoaders import ADNI_base_loader
 from shape_continuum.data_utils.surv_data import make_loader
 from shape_continuum.models import DiscModel, SurvModel
-from tensorboardX import SummaryWriter
 from shape_continuum.testing import eval_clf, eval_surv
 
 
