@@ -1,12 +1,10 @@
 from __future__ import print_function
 
-import os
 import random
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.utils.data as data
 
 import nibabel as nib
 

@@ -3,7 +3,6 @@ from typing import List, Optional
 import numpy as np
 import torch
 from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, SequentialSampler
-from torch.utils.data.dataloader import default_collate
 
 
 def make_riskset(time: np.ndarray) -> np.ndarray:

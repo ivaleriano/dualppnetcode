@@ -2,8 +2,6 @@ from time import time
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 def timeit(tag, t):
