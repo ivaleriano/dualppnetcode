@@ -1,3 +1,6 @@
+name: Tox
+on: [push, pull_request]
+
 jobs:
   linting:
     runs-on: ubuntu-latest
