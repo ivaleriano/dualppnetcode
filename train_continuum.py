@@ -3,19 +3,16 @@ import datetime
 import json
 import os
 
-import numpy as np
 import torch
 import torch.nn.parallel
 import torch.utils.data
 from tqdm import tqdm
 
-from data_utils.ADNIDataLoaders import ADNI_base_loader
-from data_utils.surv_data import make_loader
-from models.discriminative_models import DiscModel, SurvModel
-from networks.point_networks import *
-from networks.vol_networks import *
+from shape_continuum.data_utils.ADNIDataLoaders import ADNI_base_loader
+from shape_continuum.data_utils.surv_data import make_loader
+from shape_continuum.models import DiscModel, SurvModel
 from tensorboardX import SummaryWriter
-from tests.continuum_tests import eval_clf, eval_surv
+from shape_continuum.testing import eval_clf, eval_surv
 
 
 def parse_args():
