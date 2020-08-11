@@ -45,17 +45,15 @@ def coxph_loss(event, riskset, predictions):
     if predictions.dim() != 2:
         raise ValueError("predictions must be a 2D tensor.")
     if predictions.shape[1] != 1:
-        raise ValueError(
-            "last dimension of predictions ({}) must be 1.".format(predictions.shape[1]))
+        raise ValueError("last dimension of predictions ({}) must be 1.".format(predictions.shape[1]))
     if event is None:
         raise ValueError("event must not be None.")
     if predictions.dim() != event.dim():
         raise ValueError(
-            "Rank of predictions ({}) must equal rank of event ({})".format(
-                predictions.dim(), event.dim()))
+            "Rank of predictions ({}) must equal rank of event ({})".format(predictions.dim(), event.dim())
+        )
     if event.shape[1] != 1:
-        raise ValueError(
-            "last dimension event ({}) must be 1.".format(event.shape[1]))
+        raise ValueError("last dimension event ({}) must be 1.".format(event.shape[1]))
     if riskset is None:
         raise ValueError("riskset must not be None.")
 

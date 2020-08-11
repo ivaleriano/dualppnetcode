@@ -1,18 +1,21 @@
+from time import time
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from time import time
-import numpy as np
+
 
 def timeit(tag, t):
     print("{}: {}s".format(tag, time() - t))
     return time()
 
+
 def pc_normalize(pc):
     l = pc.shape[0]
     centroid = np.mean(pc, axis=0)
     pc = pc - centroid
-    m = np.max(np.sqrt(np.sum(pc**2, axis=1)))
+    m = np.max(np.sqrt(np.sum(pc ** 2, axis=1)))
     pc = pc / m
     return pc
 
@@ -63,8 +66,8 @@ def index_points(points, idx):
     new_points = points[batch_indices, idx, :]
     return new_points
 
-# def decomp_points(group_indices,n_points):
 
+# def decomp_points(group_indices,n_points):
 
 
 def farthest_point_sample(xyz, npoint):
@@ -114,24 +117,22 @@ def query_ball_point(radius, nsample, xyz, new_xyz):
     return group_idx
 
 
-
-def k_nearest(pointcloudA,centroids_xyz,n_samples=32):
-    distsA = square_distance(pointcloudA,centroids_xyz)
+def k_nearest(pointcloudA, centroids_xyz, n_samples=32):
+    distsA = square_distance(pointcloudA, centroids_xyz)
     B, n_centroids, C = centroids_xyz.size()
     for i in range(n_centroids):
-        dists2centroidA = distsA[:,:,i]
-        indicesA = torch.argsort(dists2centroidA,1,descending=True)[:,:n_samples]
-        sub_pcA = torch.unsqueeze(index_points(pointcloudA,indicesA),1)
-        if i==0:
+        dists2centroidA = distsA[:, :, i]
+        indicesA = torch.argsort(dists2centroidA, 1, descending=True)[:, :n_samples]
+        sub_pcA = torch.unsqueeze(index_points(pointcloudA, indicesA), 1)
+        if i == 0:
             group_xyz = sub_pcA
         else:
-            group_xyz = torch.cat([group_xyz,sub_pcA],1)
-
+            group_xyz = torch.cat([group_xyz, sub_pcA], 1)
 
     return group_xyz
 
 
-def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False,returnidx = False):
+def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False, returnidx=False):
     """
     Input:
         npoint:
@@ -145,14 +146,14 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False,retur
     """
     B, N, C = xyz.shape
     S = npoint
-    fps_idx = farthest_point_sample(xyz, npoint) # [B, npoint, C]
+    fps_idx = farthest_point_sample(xyz, npoint)  # [B, npoint, C]
     new_xyz = index_points(xyz, fps_idx)
     idx = query_ball_point(radius, nsample, xyz, new_xyz)
-    grouped_xyz = index_points(xyz, idx) # [B, npoint, nsample, C]
+    grouped_xyz = index_points(xyz, idx)  # [B, npoint, nsample, C]
     grouped_xyz_norm = grouped_xyz - new_xyz.view(B, S, 1, C)
     if points is not None:
         grouped_points = index_points(points, idx)
-        new_points = torch.cat([grouped_xyz_norm, grouped_points], dim=-1) # [B, npoint, nsample, C+D]
+        new_points = torch.cat([grouped_xyz_norm, grouped_points], dim=-1)  # [B, npoint, nsample, C+D]
     else:
         new_points = grouped_xyz_norm
     if returnfps:
@@ -161,8 +162,6 @@ def sample_and_group(npoint, radius, nsample, xyz, points, returnfps=False,retur
         return new_xyz, new_points, fps_idx, idx
     else:
         return new_xyz, new_points
-
-
 
 
 def sample_and_group_all(xyz, points):
@@ -229,6 +228,3 @@ def sample_and_group_2pc(npoint, radius, nsample, xyz1, points, xyz2=None, retur
         return new_xyz1, new_points, fps_idx, idx
     else:
         return new_xyz1, new_points
-
-
-

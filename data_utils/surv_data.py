@@ -1,7 +1,8 @@
 from typing import List, Optional
+
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, SequentialSampler, BatchSampler, RandomSampler
+from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.dataloader import default_collate
 
 
@@ -19,8 +20,7 @@ def make_riskset(time: np.ndarray) -> np.ndarray:
     return risk_set
 
 
-def cox_collate_fn(batch: List[np.ndarray],
-                   time_index: Optional[int] = -1) -> List[torch.Tensor]:
+def cox_collate_fn(batch: List[np.ndarray], time_index: Optional[int] = -1) -> List[torch.Tensor]:
     """Sort samples in batch by observed time (descending)"""
     transposed_data = list(zip(*batch))
     y_time = np.array(transposed_data[time_index])
@@ -36,8 +36,7 @@ def cox_collate_fn(batch: List[np.ndarray],
     return data
 
 
-def make_loader(dataset: Dataset,
-                batch_size: Optional[int] = None,shuffle: Optional[bool] = True) -> DataLoader:
+def make_loader(dataset: Dataset, batch_size: Optional[int] = None, shuffle: Optional[bool] = True) -> DataLoader:
     # if not hasattr(dataset, "time"):
     #     raise ValueError("dataset must have a time attribute.")
 
@@ -51,13 +50,7 @@ def make_loader(dataset: Dataset,
         sampler = RandomSampler(dataset)
     else:
         sampler = SequentialSampler(dataset)
-    batch_sampler = BatchSampler(
-        sampler,
-        batch_size=batch_size,
-        drop_last=False)
+    batch_sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=False)
 
-    dataloader = DataLoader(
-        dataset,
-        collate_fn=cox_collate_fn,
-        batch_sampler=batch_sampler)
+    dataloader = DataLoader(dataset, collate_fn=cox_collate_fn, batch_sampler=batch_sampler)
     return dataloader

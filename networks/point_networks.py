@@ -1,11 +1,10 @@
-import torch.nn as nn
-import torch
 import numpy as np
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from networks.point_utils import *
+
 from networks.point_blocks import *
-
-
+from networks.point_utils import *
 
 
 class PointNet(nn.Module):
@@ -27,21 +26,21 @@ class PointNet(nn.Module):
         x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
-        if self.task == 'clf':
-            x =  F.log_softmax(x, dim=1)
-        outputs = {'pred': x}
+        if self.task == "clf":
+            x = F.log_softmax(x, dim=1)
+        outputs = {"pred": x}
         return outputs
 
 
-
-
 class PointNet2ClsMsg(nn.Module):
-    def __init__(self,opt):
+    def __init__(self, opt):
         super(PointNet2ClsMsg, self).__init__()
-        self.sa1 = PointNetSetAbstractionMsg(512, [0.1, 0.2, 0.4], [16, 32, 128], 0,
-                                             [[32, 32, 64], [64, 64, 128], [64, 96, 128]])
-        self.sa2 = PointNetSetAbstractionMsg(128, [0.2, 0.4, 0.8], [32, 64, 128], 320,
-                                             [[64, 64, 128], [128, 128, 256], [128, 128, 256]])
+        self.sa1 = PointNetSetAbstractionMsg(
+            512, [0.1, 0.2, 0.4], [16, 32, 128], 0, [[32, 32, 64], [64, 64, 128], [64, 96, 128]]
+        )
+        self.sa2 = PointNetSetAbstractionMsg(
+            128, [0.2, 0.4, 0.8], [32, 64, 128], 320, [[64, 64, 128], [128, 128, 256], [128, 128, 256]]
+        )
         self.sa3 = PointNetSetAbstraction(None, None, None, 640 + 3, [256, 512, 1024], True)
         self.fc1 = nn.Linear(1024, 512)
         self.bn1 = nn.BatchNorm1d(512)
@@ -61,19 +60,23 @@ class PointNet2ClsMsg(nn.Module):
         x = self.drop2(F.relu(self.bn2(self.fc2(x))))
         x = self.fc3(x)
         x = F.log_softmax(x, -1)
-        outputs = {'pred': x,
-                  'l3_points':l3_points}
+        outputs = {"pred": x, "l3_points": l3_points}
         return outputs
 
 
-
 class PointNet2ClsSsg(nn.Module):
-    def __init__(self,opt,surv=False):
+    def __init__(self, opt, surv=False):
         super(PointNet2ClsSsg, self).__init__()
         self.surv = surv
-        self.sa1 = PointNetSetAbstraction(npoint=512, radius=0.2, nsample=32, in_channel=3, mlp=[64, 64, 128], group_all=False)
-        self.sa2 = PointNetSetAbstraction(npoint=128, radius=0.4, nsample=64, in_channel=128 + 3, mlp=[128, 128, 256], group_all=False)
-        self.sa3 = PointNetSetAbstraction(npoint=None, radius=None, nsample=None, in_channel=256 + 3, mlp=[256, 512, 1024], group_all=True)
+        self.sa1 = PointNetSetAbstraction(
+            npoint=512, radius=0.2, nsample=32, in_channel=3, mlp=[64, 64, 128], group_all=False
+        )
+        self.sa2 = PointNetSetAbstraction(
+            npoint=128, radius=0.4, nsample=64, in_channel=128 + 3, mlp=[128, 128, 256], group_all=False
+        )
+        self.sa3 = PointNetSetAbstraction(
+            npoint=None, radius=None, nsample=None, in_channel=256 + 3, mlp=[256, 512, 1024], group_all=True
+        )
         self.fc1 = nn.Linear(1024, 512)
         self.bn1 = nn.BatchNorm1d(512)
         self.drop1 = nn.Dropout(0.4)
@@ -93,7 +96,5 @@ class PointNet2ClsSsg(nn.Module):
         x = self.fc3(x)
         if not self.surv:
             x = F.log_softmax(x, -1)
-        outputs = {'pred': x,
-                   'ln_points': [l1_points,l2_points,l3_points]}
+        outputs = {"pred": x, "ln_points": [l1_points, l2_points, l3_points]}
         return outputs
-
