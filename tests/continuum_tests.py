@@ -46,7 +46,7 @@ def eval_clf(model,testDataLoader,i_test=0,writer=None):
             shapes, target = data
             target = target[:, 0]
             shapes, target = shapes.cuda(), target.cuda()
-            model.setShapes(shapes,target)
+            model.setShapes(data)
             model.forward()
             pred = torch.squeeze(model.pred)
             pred_choice = pred.data.max(1)[1]
@@ -84,12 +84,12 @@ def eval_clf(model,testDataLoader,i_test=0,writer=None):
 def eval_surv(model,testDataLoader,i_test=0,writer=None):
     with torch.no_grad():
         model.eval()
-        for batch_idx, (x, y_event, y_time, y_riskset) in tqdm(enumerate(testDataLoader, 0),
+        for batch_idx, data in tqdm(enumerate(testDataLoader, 0),
                                                            total=len(testDataLoader),
                                                            smoothing=0.9):
-            shapes, y_event, y_riskset = \
-                x.cuda(), y_event.cuda(), y_riskset.cuda()
-            model.setShapes(shapes, y_riskset, y_event)
+            # shapes, y_event, y_riskset = \
+            #     x.cuda(), y_event.cuda(), y_riskset.cuda()
+            model.setShapes(data)
             model.forward()
             pred = torch.squeeze(model.pred).cpu().detach().numpy()
             event = torch.squeeze(y_event).cpu().detach().numpy()

@@ -24,9 +24,9 @@ class DiscModel(nn.Module):
 
     def setShapes(self,data):
         shapes, target = data
-        shapes, target = shapes.cuda(), target[:, 0].cuda()
+        self.shapes, self.target = shapes.cuda(), target[:, 0].cuda()
         if self.shape == 'pointcloud_free' or self.shape == 'pointcloud_fsl':
-            self.bs, C, N = shapes.size()
+            self.bs, C, N = self.shapes.size()
             if C > N:
                 self.shapes = self.shapes.transpose(2, 1)
 
