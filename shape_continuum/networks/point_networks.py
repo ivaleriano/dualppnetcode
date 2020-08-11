@@ -1,5 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
+from shape_continuum.networks.point_blocks import Encoder_2f,PointNetSetAbstraction,PointNetSetAbstractionMsg
+
+
 
 
 class PointNet(nn.Module):
