@@ -56,7 +56,7 @@ def eval_clf(model, testDataLoader, i_test=0, writer=None):
             shapes, target = data
             target = target[:, 0]
             shapes, target = shapes.cuda(), target.cuda()
-            model.setShapes(shapes, target)
+            model.setShapes(data)
             model.forward()
             pred = torch.squeeze(model.pred)
             pred_choice = pred.data.max(1)[1]

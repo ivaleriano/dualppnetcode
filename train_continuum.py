@@ -11,8 +11,10 @@ from tqdm import tqdm
 
 from shape_continuum.data_utils.ADNIDataLoaders import ADNI_base_loader
 from shape_continuum.data_utils.surv_data import make_loader
-from shape_continuum.models import DiscModel, SurvModel
-from shape_continuum.testing import eval_clf, eval_surv
+from shape_continuum.models.discriminative_models import DiscModel, SurvModel
+from shape_continuum.testing.continuum_tests import eval_clf, eval_surv
+from shape_continuum.networks.vol_networks import Vol_classifier,ResNet
+from shape_continuum.networks.point_networks import PointNet,PointNet2ClsMsg,PointNet2ClsSsg
 
 
 def parse_args():
@@ -27,8 +29,8 @@ def parse_args():
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
     parser.add_argument("--optimizer", type=str, default="Adam", help="type of optimizer")
     parser.add_argument("--task", type=str, default="clf", help="classification or survival analysis")
-    parser.add_argument("--train_data", type=str, default="", help="path to training dataset")
-    parser.add_argument("--test_data", type=str, default="", help="path to testing dataset")
+    parser.add_argument("--train_data", type=str, default="/home/ignacio/shapeAnalysis/data/ADNI_ALL/CN_AD_balanced_cls/pcs_mesh_mask_vols_train_set_1.csv", help="path to training dataset")
+    parser.add_argument("--test_data", type=str, default="/home/ignacio/shapeAnalysis/data/ADNI_ALL/CN_AD_balanced_cls/pcs_mesh_mask_vols_test_set_1.csv", help="path to testing dataset")
     parser.add_argument(
         "--discriminator_net", type=str, default="pointnet", help="which architecture to use for discriminator"
     )
@@ -83,7 +85,7 @@ def main(args):
     if args.experiment_name:
         experiment = input("input a name for your experiment")
     else:
-        experiment = "shape_%s_network_%s" % (args.shape, args.discriminator)
+        experiment = "shape_%s_network_%s" % (args.shape, args.discriminator_net)
     experiment_dir = os.path.join(experiment_dir, experiment)
     os.makedirs(experiment_dir, exist_ok=True)
 
@@ -132,7 +134,7 @@ def main(args):
 
     disc_ops = args
     if args.shape == "pointcloud_free" or args.shape == "pointcloud_fsl":
-        args.discriminator = PointNet(disc_ops) if args.discriminator_net == "pointnet" else HRPNet(disc_ops)
+        args.discriminator = PointNet(disc_ops) if args.discriminator_net == "pointnet" else PointNet2ClsMsg(disc_ops)
 
     elif args.shape == "vol_mask_free":
         args.discriminator = ResNet(disc_ops) if args.discriminator_net == "resnet" else Vol_classifier(disc_ops)
