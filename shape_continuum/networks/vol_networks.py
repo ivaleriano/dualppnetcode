@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from shape_continuum.networks.vol_blocks import down_cls,fc_cls,ConvBnReLU,ResBlock
+
+from shape_continuum.networks.vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls
 
 
 class Vol_classifier(nn.Module):

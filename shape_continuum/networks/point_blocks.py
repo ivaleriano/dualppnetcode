@@ -2,7 +2,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from shape_continuum.networks.point_utils import query_ball_point,sample_and_group,sample_and_group_all,index_points,farthest_point_sample,square_distance
+
+from shape_continuum.networks.point_utils import (
+    farthest_point_sample,
+    index_points,
+    query_ball_point,
+    sample_and_group,
+    sample_and_group_all,
+    square_distance,
+)
 
 # ----------PointNet Blocks ----------------
 

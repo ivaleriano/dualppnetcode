@@ -12,9 +12,9 @@ from tqdm import tqdm
 from shape_continuum.data_utils.ADNIDataLoaders import ADNI_base_loader
 from shape_continuum.data_utils.surv_data import make_loader
 from shape_continuum.models.discriminative_models import DiscModel, SurvModel
+from shape_continuum.networks.point_networks import PointNet, PointNet2ClsMsg, PointNet2ClsSsg
+from shape_continuum.networks.vol_networks import ResNet, Vol_classifier
 from shape_continuum.testing.continuum_tests import eval_clf, eval_surv
-from shape_continuum.networks.vol_networks import Vol_classifier,ResNet
-from shape_continuum.networks.point_networks import PointNet,PointNet2ClsMsg,PointNet2ClsSsg
 
 
 def parse_args():
