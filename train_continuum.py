@@ -38,10 +38,10 @@ def parse_args():
     )
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
     parser.add_argument(
-        "--optimizer", default="Adam", help="type of optimizer"
+        "--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer"
     )
     parser.add_argument(
-        "--task", default="clf", help="classification or survival analysis"
+        "--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis"
     )
     parser.add_argument(
         "--train_data",
