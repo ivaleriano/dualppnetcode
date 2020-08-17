@@ -30,40 +30,36 @@ def parse_args():
         "--num_points", type=int, default=1500, help="number of epochs for training"
     )
     parser.add_argument(
-        "--pretrain", type=str, default=None, help="whether use pretrain model"
+        "--pretrain", help="whether use pretrain model"
     )
-    parser.add_argument("--gpu", type=str, default="0", help="specify gpu device")
+    parser.add_argument("--gpu", default="0", help="specify gpu device")
     parser.add_argument(
         "--learning_rate", type=float, default=0.001, help="learning rate for training"
     )
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
     parser.add_argument(
-        "--optimizer", type=str, default="Adam", help="type of optimizer"
+        "--optimizer", default="Adam", help="type of optimizer"
     )
     parser.add_argument(
-        "--task", type=str, default="clf", help="classification or survival analysis"
+        "--task", default="clf", help="classification or survival analysis"
     )
     parser.add_argument(
         "--train_data",
-        type=str,
         default="/home/ignacio/shapeAnalysis/data/ADNI_ALL/CN_AD_balanced_cls/pcs_mesh_mask_vols_train_set_1.csv",
         help="path to training dataset",
     )
     parser.add_argument(
         "--test_data",
-        type=str,
         default="/home/ignacio/shapeAnalysis/data/ADNI_ALL/CN_AD_balanced_cls/pcs_mesh_mask_vols_test_set_1.csv",
         help="path to testing dataset",
     )
     parser.add_argument(
         "--discriminator_net",
-        type=str,
         default="pointnet",
         help="which architecture to use for discriminator",
     )
     parser.add_argument(
         "--shape",
-        type=str,
         default="pointcloud_fsl",
         help="which shape representation to use "
         "(pointcloud_free,pointcloud_fsl,mesh_fsl,vol_mask_free,vol_bb_nobg,vol_bb_wbg",
@@ -71,26 +67,25 @@ def parse_args():
     parser.add_argument("--num_classes", type=int, default=2, help="number of classes")
     parser.add_argument(
         "--out_csv",
-        type=str,
         default="perf_metrics",
         help="output file to save performance metrics",
     )
     parser.add_argument(
         "--experiment_name",
-        type=bool,
+        action="store_true",
         default=False,
         help="True if input a particular name for the experiment (default False: current date and time)",
     )
     parser.add_argument(
         "--tb_comment",
-        type=bool,
+        action="store_true",
         default=False,
         help="any comment for storing on tensorboard",
     )
     parser.add_argument(
         "--tensorboard",
-        type=bool,
-        default=True,
+        action="store_true",
+        default=False,
         help="visualize training progress on tensorboard",
     )
 
