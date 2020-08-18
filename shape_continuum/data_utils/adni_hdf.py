@@ -130,7 +130,7 @@ def get_image_dataset_for_eval(filename, dataset_name, rescale=False, standardiz
             std = ds.meta["stddev"].astype(np.float32)
             img_transforms.append(transforms.Lambda(lambda x: (x - mean) / std))
 
-    if not rescale and not standardize:
+    if len(img_transforms) == 0:
         img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
 
     img_transforms.append(AddChannelDim)
