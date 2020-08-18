@@ -20,29 +20,15 @@ from shape_continuum.testing.continuum_tests import eval_clf, eval_surv
 def parse_args():
     parser = argparse.ArgumentParser("PointNet")
     parser.add_argument("--batchsize", type=int, default=20, help="input batch size")
-    parser.add_argument(
-        "--workers", type=int, default=4, help="number of data loading workers"
-    )
-    parser.add_argument(
-        "--epoch", type=int, default=200, help="number of epochs for training"
-    )
-    parser.add_argument(
-        "--num_points", type=int, default=1500, help="number of epochs for training"
-    )
-    parser.add_argument(
-        "--pretrain", help="whether use pretrain model"
-    )
+    parser.add_argument("--workers", type=int, default=4, help="number of data loading workers")
+    parser.add_argument("--epoch", type=int, default=200, help="number of epochs for training")
+    parser.add_argument("--num_points", type=int, default=1500, help="number of epochs for training")
+    parser.add_argument("--pretrain", help="whether use pretrain model")
     parser.add_argument("--gpu", default="0", help="specify gpu device")
-    parser.add_argument(
-        "--learning_rate", type=float, default=0.001, help="learning rate for training"
-    )
+    parser.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
-    parser.add_argument(
-        "--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer"
-    )
-    parser.add_argument(
-        "--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis"
-    )
+    parser.add_argument("--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer")
+    parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
     parser.add_argument(
         "--train_data",
         default="/home/ignacio/shapeAnalysis/data/ADNI_ALL/CN_AD_balanced_cls/pcs_mesh_mask_vols_train_set_1.csv",
@@ -54,9 +40,7 @@ def parse_args():
         help="path to testing dataset",
     )
     parser.add_argument(
-        "--discriminator_net",
-        default="pointnet",
-        help="which architecture to use for discriminator",
+        "--discriminator_net", default="pointnet", help="which architecture to use for discriminator",
     )
     parser.add_argument(
         "--shape",
@@ -66,9 +50,7 @@ def parse_args():
     )
     parser.add_argument("--num_classes", type=int, default=2, help="number of classes")
     parser.add_argument(
-        "--out_csv",
-        default="perf_metrics",
-        help="output file to save performance metrics",
+        "--out_csv", default="perf_metrics", help="output file to save performance metrics",
     )
     parser.add_argument(
         "--experiment_name",
@@ -77,16 +59,10 @@ def parse_args():
         help="True if input a particular name for the experiment (default False: current date and time)",
     )
     parser.add_argument(
-        "--tb_comment",
-        action="store_true",
-        default=False,
-        help="any comment for storing on tensorboard",
+        "--tb_comment", action="store_true", default=False, help="any comment for storing on tensorboard",
     )
     parser.add_argument(
-        "--tensorboard",
-        action="store_true",
-        default=False,
-        help="visualize training progress on tensorboard",
+        "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
 
     return parser.parse_args()
@@ -94,27 +70,21 @@ def parse_args():
 
 def train_one_epoch(model, trainDataLoader, epoch, writer=None):
     model.train()
-    for batch_idx, data in tqdm(
-        enumerate(trainDataLoader, 0), total=len(trainDataLoader), smoothing=0.9
-    ):
+    for batch_idx, data in tqdm(enumerate(trainDataLoader, 0), total=len(trainDataLoader), smoothing=0.9):
 
         if model.task == "surv":
             model.setShapes(data)
             model.train_epoch()
             if writer:
                 writer.add_scalar(
-                    "train/coxph_loss",
-                    model.loss_D.cpu().data.numpy(),
-                    epoch * len(trainDataLoader) + batch_idx,
+                    "train/coxph_loss", model.loss_D.cpu().data.numpy(), epoch * len(trainDataLoader) + batch_idx,
                 )
         else:
             model.setShapes(data)
             model.train_epoch()
             if writer:
                 writer.add_scalar(
-                    "train/nll_loss",
-                    model.loss_D.cpu().data.numpy(),
-                    epoch * len(trainDataLoader) + batch_idx,
+                    "train/nll_loss", model.loss_D.cpu().data.numpy(), epoch * len(trainDataLoader) + batch_idx,
                 )
 
     print("training loss: %f" % model.loss_D.cpu().data.numpy())
@@ -142,9 +112,7 @@ def main(args):
     else:
         args.batch_norm = True
 
-    checkpoints_dir = os.path.join(
-        experiment_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    )
+    checkpoints_dir = os.path.join(experiment_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M"))
     os.makedirs(checkpoints_dir, exist_ok=True)
 
     with open(os.path.join(checkpoints_dir, "experiment_args.txt"), "w") as f:
@@ -157,11 +125,7 @@ def main(args):
             comment = ""
         writer = SummaryWriter(
             os.path.join(
-                experiment_dir,
-                "tb_log",
-                comment
-                + args.shape
-                + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M"),
+                experiment_dir, "tb_log", comment + args.shape + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M"),
             )
         )
     else:
@@ -173,19 +137,13 @@ def main(args):
     trainDataset = ADNI_base_loader(args.train_data, shape=args.shape, task=args.task)
     valDataset = ADNI_base_loader(args.test_data, shape=args.shape, task=args.task)
     if args.task == "surv":
-        trainDataLoader = make_loader(
-            trainDataset, batch_size=args.batchsize, shuffle=True
-        )
-        valDataLoader = make_loader(
-            valDataset, batch_size=args.batchsize, shuffle=False
-        )
+        trainDataLoader = make_loader(trainDataset, batch_size=args.batchsize, shuffle=True)
+        valDataLoader = make_loader(valDataset, batch_size=args.batchsize, shuffle=False)
     else:
         trainDataLoader = torch.utils.data.DataLoader(
             trainDataset, batch_size=args.batchsize, shuffle=True, drop_last=True
         )
-        valDataLoader = torch.utils.data.DataLoader(
-            valDataset, batch_size=args.batchsize, shuffle=True, drop_last=True
-        )
+        valDataLoader = torch.utils.data.DataLoader(valDataset, batch_size=args.batchsize, shuffle=True, drop_last=True)
 
     if args.shape == "multi_vol":
         args.in_channels = 2
@@ -194,18 +152,10 @@ def main(args):
 
     disc_ops = args
     if args.shape == "pointcloud_free" or args.shape == "pointcloud_fsl":
-        args.discriminator = (
-            PointNet(disc_ops)
-            if args.discriminator_net == "pointnet"
-            else PointNet2ClsMsg(disc_ops)
-        )
+        args.discriminator = PointNet(disc_ops) if args.discriminator_net == "pointnet" else PointNet2ClsMsg(disc_ops)
 
     elif args.shape == "vol_mask_free":
-        args.discriminator = (
-            ResNet(disc_ops)
-            if args.discriminator_net == "resnet"
-            else Vol_classifier(disc_ops)
-        )
+        args.discriminator = ResNet(disc_ops) if args.discriminator_net == "resnet" else Vol_classifier(disc_ops)
     else:
         args.discriminator = Vol_classifier(disc_ops)  # TODO: change for mesh classfier
 
@@ -220,9 +170,7 @@ def main(args):
     init_epoch = int(pretrain[-14:-11]) if args.pretrain is not None else 0  # TODO: CHANGE THIS
 
     if args.optimizer == "SGD":
-        args.optimizerD = torch.optim.SGD(
-            args.discriminator.parameters(), lr=0.01, momentum=0.9
-        )
+        args.optimizerD = torch.optim.SGD(args.discriminator.parameters(), lr=0.01, momentum=0.9)
     elif args.optimizer == "Adam":
         args.optimizerD = torch.optim.Adam(
             args.discriminator.parameters(),
@@ -231,9 +179,7 @@ def main(args):
             eps=1e-08,
             weight_decay=args.decay_rate,
         )
-    args.scheduler = torch.optim.lr_scheduler.StepLR(
-        args.optimizerD, step_size=20, gamma=0.5
-    )
+    args.scheduler = torch.optim.lr_scheduler.StepLR(args.optimizerD, step_size=20, gamma=0.5)
     LEARNING_RATE_CLIP = 1e-5
 
     args.discriminator.cuda()
@@ -261,10 +207,7 @@ def main(args):
                 mets = eval_clf(model, valDataLoader, i_test, writer)
                 print("accuracy:" + str(mets["acc"]))
             i_test += 1
-            torch.save(
-                model.discriminator.state_dict(),
-                "%s/discriminator_%.3d.pth" % (checkpoints_dir, epoch),
-            )
+            torch.save(model.discriminator.state_dict(), "%s/discriminator_%.3d.pth" % (checkpoints_dir, epoch))
 
 
 if __name__ == "__main__":
