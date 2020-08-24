@@ -79,7 +79,7 @@ class Encoder_2f(nn.Module):
         self.global_feat = global_feat
 
     def forward(self, x):
-        batchsize = x.size()[0]
+        # batchsize = x.size()[0]
         if self.trans:
             trans = self.stn(x)
             x = x.transpose(2, 1)
