@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Callable, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -91,7 +91,32 @@ class HDF5Dataset(Dataset):
         return img, target
 
 
-def get_image_dataset_for_eval(filename, dataset_name, rescale=False, standardize=False):
+def _get_image_dataset_transform(
+    dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray]
+) -> Callable[[np.ndarray], np.ndarray]:
+    img_transforms = []
+
+    if rescale:
+        max_val = np.array(np.iinfo(dtype).max, dtype=np.float32)
+        img_transforms.append(transforms.Lambda(lambda x: x / max_val))
+
+    if with_mean is not None or with_std is not None:
+        if with_mean is None:
+            with_mean = np.array(0.0, dtype=np.float32)
+        if with_std is None:
+            with_std = np.array(1.0, dtype=np.float32)
+        img_transforms.append(transforms.Lambda(lambda x: (x - with_mean) / with_std))
+
+    if len(img_transforms) == 0:
+        img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+
+    img_transforms.append(AddChannelDim)
+    img_transforms.append(NumpyToTensor)
+
+    return transforms.Compose(img_transforms)
+
+
+def get_image_dataset_for_train(filename, dataset_name, rescale=False, standardize=False):
     """Loads 3D image volumes from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -108,6 +133,12 @@ def get_image_dataset_for_eval(filename, dataset_name, rescale=False, standardiz
         Optional; Whether to subtract the voxel-wise mean and divide by the
         voxel-wise standard deviation.
 
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 3D ndarray and diagnosis.
+      transform_kwargs (dict):
+        A dict with arguments used for creating image transform pipeline.
+
     Raises:
       ValueError:
         If both rescale and standardize are True.
@@ -116,32 +147,70 @@ def get_image_dataset_for_eval(filename, dataset_name, rescale=False, standardiz
 
     ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
 
-    img_transforms = []
     if dataset_name != "mask":
         if rescale and standardize:
             raise ValueError("only one of rescale and standardize can be True.")
+    else:
+        rescale = False
+        standardize = False
 
-        if rescale:
-            max_val = np.array(np.iinfo(ds.data[0].dtype).max, dtype=np.float32)
-            img_transforms.append(transforms.Lambda(lambda x: x / max_val))
+    if standardize:
+        mean = ds.meta["mean"].astype(np.float32)
+        std = ds.meta["stddev"].astype(np.float32)
+    else:
+        mean = None
+        std = None
 
-        if standardize:
-            mean = ds.meta["mean"].astype(np.float32)
-            std = ds.meta["stddev"].astype(np.float32)
-            img_transforms.append(transforms.Lambda(lambda x: (x - mean) / std))
+    transform_kwargs = {
+        "dtype": ds.data[0].dtype,
+        "rescale": rescale,
+        "with_mean": mean,
+        "with_std": std,
+    }
 
-    if len(img_transforms) == 0:
-        img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+    ds.transform = _get_image_dataset_transform(**transform_kwargs)
 
-    img_transforms.append(AddChannelDim)
-    img_transforms.append(NumpyToTensor)
+    return ds, transform_kwargs
 
-    ds.transform = transforms.Compose(img_transforms)
+
+def get_image_dataset_for_eval(filename, transform_kwargs, dataset_name):
+    """Loads 3D image volumes from HDF5 file and converts them to Tensors.
+
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      transform_kwargs (dict):
+        Arguments for image transform pipeline used during training as
+        returned by :func:`get_image_dataset_for_train`.
+      dataset_name (str):
+        Name of the dataset to load (e.g. 'mask', 'vol_with_bg', 'vol_without_bg').
+
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 4D ndarray and diagnosis.
+    """
+    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+
+    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+
+    ds.transform = _get_image_dataset_transform(**transform_kwargs)
 
     return ds
 
 
-def get_point_cloud_dataset_for_eval(filename, dataset_name="pointcloud"):
+def _get_point_cloud_transform(norm: Optional[float], transpose: bool):
+    pc_transforms = []
+
+    if norm is not None:
+        pc_transforms.append(transforms.Lambda(lambda x: x / norm))
+    if transpose:
+        pc_transforms.append(transforms.Lambda(lambda x: x.transpose(1, 0)))
+    pc_transforms.append(NumpyToTensor)
+
+    return transforms.Compose(pc_transforms)
+
+
+def get_point_cloud_dataset_for_train(filename, dataset_name="pointcloud"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -151,14 +220,46 @@ def get_point_cloud_dataset_for_eval(filename, dataset_name="pointcloud"):
         Path to HDF5 file.
       dataset_name (str):
         Optional; Name of the dataset to load.
+
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 3D ndarray and diagnosis.
+      transform_kwargs (dict):
+        A dict with arguments used for creating point cloud transform pipeline.
     """
     target_transform = transforms.Compose([LabelsToIndex, AsTensor])
 
     ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
 
-    norm = ds.meta["max_dist_q95"].astype(np.float32)
-    ds.transform = transforms.Compose(
-        [transforms.Lambda(lambda x: x / norm), transforms.Lambda(lambda x: x.transpose(1, 0)), NumpyToTensor]
-    )
+    transform_kwargs = {
+        "norm": ds.meta["max_dist_q95"].astype(np.float32),
+        "transpose": True,
+    }
+    ds.transform = _get_point_cloud_transform(**transform_kwargs)
+
+    return ds, transform_kwargs
+
+
+def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="pointcloud"):
+    """Loads 3D point cloud from HDF5 file and converts them to Tensors.
+
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      transform_kwargs (dict):
+        Arguments for point cloud transform pipeline used during training as
+        returned by :func:`get_point_cloud_dataset_for_train`.
+      dataset_name (str):
+        Optional; Name of the dataset to load.
+
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 3D ndarray and diagnosis.
+    """
+    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+
+    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+
+    ds.transform = _get_point_cloud_transform(**transform_kwargs)
 
     return ds

@@ -9,7 +9,7 @@ import torch
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 
-from shape_continuum.data_utils.adni_hdf import get_image_dataset_for_eval, get_point_cloud_dataset_for_eval
+from shape_continuum.data_utils import adni_hdf
 from shape_continuum.models.base import BaseModel
 from shape_continuum.networks import point_networks, vol_networks
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
@@ -215,12 +215,12 @@ class ImageModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        train_data = get_image_dataset_for_eval(args.train_data, args.shape, rescale=True)
+        train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(args.train_data, args.shape, rescale=True)
         trainDataLoader = NamedDataLoader(
             train_data, output_names=["image", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
 
-        eval_data = get_image_dataset_for_eval(args.test_data, args.shape, rescale=True)
+        eval_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
         valDataLoader = NamedDataLoader(eval_data, output_names=["image", "target"], batch_size=args.batchsize)
         return trainDataLoader, valDataLoader
 
@@ -240,12 +240,12 @@ class PointCloudModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        train_data = get_point_cloud_dataset_for_eval(args.train_data)
+        train_data, transform_kwargs = adni_hdf.get_point_cloud_dataset_for_train(args.train_data)
         trainDataLoader = NamedDataLoader(
             train_data, output_names=["pointcloud", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
 
-        eval_data = get_point_cloud_dataset_for_eval(args.test_data)
+        eval_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
         valDataLoader = NamedDataLoader(eval_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
         return trainDataLoader, valDataLoader
 
