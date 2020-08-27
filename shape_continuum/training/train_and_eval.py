@@ -235,7 +235,7 @@ class ModelEvaluator(ModelRunner):
     def _set_model_state(self):
         self.model = self.model.eval()
 
-    def _step(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def _step_with_loss(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         outputs = super()._step(batch)
 
         batch.update(outputs)
@@ -246,6 +246,10 @@ class ModelEvaluator(ModelRunner):
         outputs.update(losses)
 
         return outputs
+
+    def _step(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        with torch.no_grad():
+            return self._step_with_loss(batch)
 
 
 class ModelTrainer(ModelEvaluator):
@@ -291,7 +295,7 @@ class ModelTrainer(ModelEvaluator):
 
     def _step(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         self.optimizer.zero_grad()
-        outputs = super()._step(batch)
+        outputs = super()._step_with_loss(batch)
 
         total_loss = outputs["total_loss"]
 
