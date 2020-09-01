@@ -10,7 +10,7 @@ def timeit(tag, t):
 
 
 def pc_normalize(pc):
-    l = pc.shape[0]
+    # l = pc.shape[0]
     centroid = np.mean(pc, axis=0)
     pc = pc - centroid
     m = np.max(np.sqrt(np.sum(pc ** 2, axis=1)))
@@ -58,9 +58,9 @@ def index_points(points, idx):
     repeat_shape = list(idx.shape)
     repeat_shape[0] = 1
     batch_indices = torch.arange(B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)
-    max_batch = torch.max(batch_indices)
-    min_idx = torch.min(idx)
-    max_idx = torch.max(idx)
+    # max_batch = torch.max(batch_indices)
+    # min_idx = torch.min(idx)
+    # max_idx = torch.max(idx)
     new_points = points[batch_indices, idx, :]
     return new_points
 

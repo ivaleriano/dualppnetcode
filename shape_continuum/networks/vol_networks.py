@@ -1,15 +1,17 @@
+from typing import Sequence
+
 import torch.nn as nn
-import torch.nn.functional as F
 
-from shape_continuum.networks.vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls
+from ..models.base import BaseModel
+from .vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls
 
 
-class Vol_classifier(nn.Module):
+class Vol_classifier(BaseModel):
     # volume classifier from Biffi et al. - Explainable Shape Analysis
-    def __init__(self, opt, ncf=8):
+    def __init__(self, in_channels: int, num_outputs: int, ncf: int = 8) -> None:
         super(Vol_classifier, self).__init__()
 
-        self.down0 = down_cls(opt.in_channels, ncf)
+        self.down0 = down_cls(in_channels, ncf)
         self.down1 = down_cls(ncf, ncf * 2)
         self.down2 = down_cls(ncf * 2, ncf * 4)
         self.down3 = down_cls(ncf * 4, ncf * 8)
@@ -19,12 +21,19 @@ class Vol_classifier(nn.Module):
         self.fc2 = fc_cls(96, 48)
         self.fc3 = fc_cls(48, 24)
         self.fc4 = fc_cls(24, 12)
-        self.outc = nn.Linear(12, opt.num_classes)
-        self.task = opt.task
+        self.outc = nn.Linear(12, num_outputs)
 
-    def forward(self, input):
-        bs = input.size()[0]
-        d0 = self.down0(input)
+    @property
+    def input_names(self) -> Sequence[str]:
+        return ("image",)
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return ("logits",)
+
+    def forward(self, image):
+        bs = image.size()[0]
+        d0 = self.down0(image)
         d1 = self.down1(d0)
         d2 = self.down2(d1)
         d3 = self.down3(d2)
@@ -36,15 +45,14 @@ class Vol_classifier(nn.Module):
         c3 = self.fc3(c2)
         c4 = self.fc4(c3)
         out = self.outc(c4)
-        if self.task == "clf":
-            out = F.log_softmax(out, dim=1)
-        return {"pred": out}
+
+        return {"logits": out}
 
 
-class ResNet(nn.Module):
-    def __init__(self, opt):
+class ResNet(BaseModel):
+    def __init__(self, in_channels: int, num_outputs: int) -> None:
         super().__init__()
-        self.conv1 = ConvBnReLU(opt.in_channels, 32)
+        self.conv1 = ConvBnReLU(in_channels, 32)
         self.pool1 = nn.MaxPool3d(2, stride=2, padding=1)  # 32
         self.block1 = ResBlock(32, 32)
         self.pool2 = nn.MaxPool3d(2, stride=2, padding=1)  # 16
@@ -52,11 +60,18 @@ class ResNet(nn.Module):
         self.block3 = ResBlock(64, 128)
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.dropout = nn.Dropout(p=0.5, inplace=True)
-        self.fc = nn.Linear(128, opt.num_classes)
-        self.task = opt.task
+        self.fc = nn.Linear(128, num_outputs)
 
-    def forward(self, x):
-        out = self.conv1(x)
+    @property
+    def input_names(self) -> Sequence[str]:
+        return ("image",)
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return ("logits",)
+
+    def forward(self, image):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.pool2(out)
@@ -66,6 +81,5 @@ class ResNet(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.dropout(out)
         out = self.fc(out)
-        if self.task == "clf":
-            out = F.log_softmax(out, dim=1)
-        return {"pred": out}
+
+        return {"logits": out}
