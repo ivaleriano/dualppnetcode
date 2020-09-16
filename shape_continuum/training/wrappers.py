@@ -2,8 +2,11 @@ from typing import Optional, Sequence
 
 from torch.nn import Module
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data.dataloader import default_collate
 
+from torch_geometric.data import Data, Batch
 from ..models.base import BaseModel
+import torch
 
 
 class LossWrapper(BaseModel):
@@ -83,6 +86,34 @@ class NamedDataLoader(DataLoader):
 
     def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
         super().__init__(dataset=dataset, **kwargs)
+        self._output_names = output_names
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return self._output_names
+
+
+
+class MeshNamedDataLoader(DataLoader):
+    def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
+
+        def collate(data_list):
+            batch_mesh = Batch()
+            batch_mesh.batch = []
+            data_list_mesh,data_list_target  = map(list,zip(*data_list))
+
+            for key in data_list_mesh[0].keys:
+                batch_mesh[key] = default_collate([d[key] for d in data_list_mesh])
+            for i, data in enumerate(data_list_mesh):
+                num_nodes = data.num_nodes
+                if num_nodes is not None:
+                    item = torch.full((num_nodes, ), i, dtype=torch.long)
+                    batch_mesh.batch.append(item)
+            batch_mesh.batch = torch.cat(batch_mesh.batch, dim=0)
+
+            return batch_mesh,batch_mesh.y
+
+        super().__init__(dataset=dataset,collate_fn=collate, **kwargs)
         self._output_names = output_names
 
     @property

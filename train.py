@@ -11,12 +11,13 @@ from torch.utils.data import DataLoader
 
 from shape_continuum.data_utils import adni_hdf
 from shape_continuum.models.base import BaseModel
-from shape_continuum.networks import point_networks, vol_networks
+from shape_continuum.networks import point_networks, vol_networks,mesh_networks
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
 from shape_continuum.training.metrics import Accuracy, Mean, Metric
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
-from shape_continuum.training.wrappers import LossWrapper, NamedDataLoader
+from shape_continuum.training.wrappers import LossWrapper, NamedDataLoader,MeshNamedDataLoader
+import shape_continuum.data_utils.mesh_utils as mesh_utils
 
 
 def create_parser():
@@ -260,12 +261,53 @@ class PointCloudModelFactory(BaseModelFactory):
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
 
+class MeshModelFactory(BaseModelFactory):
+    def get_data(self):
+        args = self.args
+        train_data, transform_kwargs,tmp = adni_hdf.get_mesh_dataset_for_train(args.train_data)
+        trainDataLoader = MeshNamedDataLoader(
+            train_data, output_names=["mesh", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
+        )
+        eval_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
+        valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"],batch_size=args.batchsize)
+        self.tmp = tmp
+        return trainDataLoader, valDataLoader
+
+    def get_model(self):
+        args = self.args
+        use_batch_norm = args.batchsize > 1
+        if args.discriminator_net == "spiralnet":
+            in_channels=3
+            seq_length = [9,9]
+            latent_channels = 32
+            out_channels=[16,16]
+            dilation=[1,1]
+            device = torch.device("cuda")
+            #Creating the spiral sequences and the downsample matrices
+            spiral_indices_list = [
+                mesh_utils.preprocess_spiral(self.tmp["face"][idx], seq_length[idx],
+                                             self.tmp["vertices"][idx],
+                                             dilation[idx]).to(device)
+                for idx in range(len(self.tmp["face"]) - 1)
+            ]
+            down_transform_list = [
+                mesh_utils.to_sparse(down_transform).to(device)
+                for down_transform in self.tmp["down_transform"]
+            ]
+            return mesh_networks.SpiralNet(in_channels, out_channels, latent_channels,
+           spiral_indices_list, down_transform_list)
+        else:
+            raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
+
+
 def get_factory(args: argparse.Namespace) -> BaseModelFactory:
     """Returns a factory depending on selected data type from command line arguments."""
     if args.shape == "pointcloud":
         factory = PointCloudModelFactory(args)
     elif args.shape.startswith("vol_") or args.shape == "mask":
         factory = ImageModelFactory(args)
+    elif args.shape == "mesh":
+        factory = MeshModelFactory(args)
     else:
         raise ValueError("shape {!r} is unsupported".format(args.shape))
 
@@ -281,6 +323,7 @@ def main(args=None):
 
     factory.write_args(experiment_dir / "experiment_args.json")
 
+    trainDataLoader, valDataLoader = factory.get_data()
     discriminator = factory.get_and_init_model()
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
@@ -300,7 +343,7 @@ def main(args=None):
         eval_metrics = factory.get_metrics()
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics)]
 
-    trainDataLoader, valDataLoader = factory.get_data()
+
 
     train_and_evaluate(
         model=discriminator,

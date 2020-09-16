@@ -5,11 +5,16 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+from torch_geometric.data import Data
+from torch_geometric.utils import to_undirected
+from psbody.mesh import Mesh
+import shape_continuum.data_processing.mesh_sampling as mesh_sampling
 
 DIAGNOSIS_CODES = {
     "CN": np.array(0, dtype=np.int64),
     "MCI": np.array(1, dtype=np.int64),
     "Dementia": np.array(2, dtype=np.int64),
+    "AD": np.array(2, dtype=np.int64)
 }
 
 AddChannelDim = transforms.Lambda(lambda x: x[np.newaxis])
@@ -44,32 +49,63 @@ class HDF5Dataset(Dataset):
         transforms it.
     """
 
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None):
+    def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
         self.transform = transform
         self.target_transform = target_transform
         self._load(filename, dataset_name)
+        self.ds_factors = ds_factors
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
         targets = []
         visits = []
         meta = {}
+        if dataset_name == "mesh":
+            with h5py.File(filename, "r") as hf:
+                #reading template from the hdf5
+                mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:].T)
+                _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
+                self.tmp = {
+                    'vertices': V,
+                    'face': F,
+                    'adj': A,
+                    'down_transform': D,
+                    'up_transform': U
+                }
 
-        with h5py.File(filename, "r") as hf:
-            for image_uid, g in hf.items():
-                if image_uid == "stats":
-                    continue
-                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+                for image_uid, g in hf.items():
+                    if image_uid == "stats":
+                        continue
+                    visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
 
-                targets.append(g.attrs["DX"])
-                img = g[roi][dataset_name][:]
-                data.append(img)
 
-            for key, value in hf["stats"][roi][dataset_name].items():
-                if len(value.shape) > 0:
-                    meta[key] = value[:]
-                else:
-                    meta[key] = np.array(value, dtype=value.dtype)
+                    targets.append(g.attrs["DX"])
+
+                    face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
+                    x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype('float32'))
+
+                    edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
+                    edge_index = to_undirected(edge_index)
+                    y = g.attrs["DX"]
+                    y = self.target_transform(y)
+                    img = Data(x=x, y=y,edge_index=edge_index, face=face)
+                    data.append(img)
+        else:
+            with h5py.File(filename, "r") as hf:
+                for image_uid, g in hf.items():
+                    if image_uid == "stats":
+                        continue
+                    visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+
+                    targets.append(g.attrs["DX"])
+                    img = g[roi][dataset_name][:]
+                    data.append(img)
+
+                for key, value in hf["stats"][roi][dataset_name].items():
+                    if len(value.shape) > 0:
+                        meta[key] = value[:]
+                    else:
+                        meta[key] = np.array(value, dtype=value.dtype)
 
         self.data = data
         self.targets = targets
@@ -261,5 +297,68 @@ def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="p
     ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
 
     ds.transform = _get_point_cloud_transform(**transform_kwargs)
+
+    return ds
+
+def _get_mesh_transform(norm: Optional[float], transpose: bool):
+    mesh_transforms = []
+
+    #ToDo: look for the transforms needed for the mesh
+
+
+    return transforms.Compose(mesh_transforms)
+
+
+
+def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
+    """Loads 3D point cloud from HDF5 file and converts them to Tensors.
+
+    No data augmentation is applied.
+
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      dataset_name (str):
+        Optional; Name of the dataset to load.
+
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 3D ndarray and diagnosis.
+      transform_kwargs (dict):
+        A dict with arguments used for creating mesh transform pipeline.
+    """
+    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+
+    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    tmp = ds.tmp
+    transform_kwargs = {
+        "norm": 1,
+        "transpose": True,
+    }
+    ds.transform = _get_mesh_transform(**transform_kwargs)
+
+    return ds,transform_kwargs,tmp
+
+def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
+    """Loads 3D point cloud from HDF5 file and converts them to Tensors.
+
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      transform_kwargs (dict):
+        Arguments for mesh transform pipeline used during training as
+        returned by :func:`get_mesh_dataset_for_train`.
+      dataset_name (str):
+        Optional; Name of the dataset to load.
+
+    Returns:
+      dataset (HDF5Dataset):
+        Dataset iterating over tuples of 3D ndarray and diagnosis.
+    """
+    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+
+    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+
+    ds.transform = _get_mesh_transform(**transform_kwargs)
 
     return ds
