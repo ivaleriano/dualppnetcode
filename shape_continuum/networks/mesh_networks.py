@@ -4,10 +4,12 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
 """
 
 
+from typing import Sequence
+
 import torch
 import torch.nn as nn
+
 from .mesh_blocks import SpiralEnblock
-from typing import Sequence
 
 
 class SpiralNet(nn.Module):

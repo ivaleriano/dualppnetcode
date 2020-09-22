@@ -5,9 +5,10 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
 
 
 
-import openmesh as om
 import os
+
 import h5py
+import openmesh as om
 import pandas as pd
 
 

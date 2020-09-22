@@ -4,10 +4,11 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
 """
 
 
-import torch
 import numpy as np
 import openmesh as om
+import torch
 from sklearn.neighbors import KDTree
+
 
 def _next_ring(mesh, last_ring, other):
     res = []

@@ -1,12 +1,12 @@
 from typing import Optional, Sequence
 
+import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import default_collate
+from torch_geometric.data import Batch, Data
 
-from torch_geometric.data import Data, Batch
 from ..models.base import BaseModel
-import torch
 
 
 def collate(data_list):

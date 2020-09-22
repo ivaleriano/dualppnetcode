@@ -9,15 +9,14 @@ import torch
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 
-from shape_continuum.data_utils import adni_hdf
+from shape_continuum.data_utils import adni_hdf, mesh_utils
 from shape_continuum.models.base import BaseModel
-from shape_continuum.networks import point_networks, vol_networks,mesh_networks
+from shape_continuum.networks import mesh_networks, point_networks, vol_networks
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
 from shape_continuum.training.metrics import Accuracy, Mean, Metric
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
-from shape_continuum.training.wrappers import LossWrapper, NamedDataLoader,MeshNamedDataLoader
-import shape_continuum.data_utils.mesh_utils as mesh_utils
+from shape_continuum.training.wrappers import LossWrapper, MeshNamedDataLoader, NamedDataLoader
 
 
 def create_parser():

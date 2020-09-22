@@ -5,10 +5,11 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
 
 
 
-import math
 import heapq
-import numpy as np
+import math
 import os
+
+import numpy as np
 import scipy.sparse as sp
 from psbody.mesh import Mesh
 

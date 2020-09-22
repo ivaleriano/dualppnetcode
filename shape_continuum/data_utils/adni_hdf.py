@@ -3,11 +3,12 @@ from typing import Callable, Optional, Tuple
 import h5py
 import numpy as np
 import torch
+from psbody.mesh import Mesh
 from torch.utils.data import Dataset
-from torchvision import transforms
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
-from psbody.mesh import Mesh
+from torchvision import transforms
+
 from ..data_processing import mesh_sampling
 
 DIAGNOSIS_CODES = {
