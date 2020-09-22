@@ -1,3 +1,9 @@
+"""
+Code adapted from Gong et al. SpiralNet++ Pytorch implementation
+ https://github.com/sw-gong/spiralnet_plus
+"""
+
+
 import torch
 import numpy as np
 import openmesh as om

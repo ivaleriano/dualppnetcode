@@ -1,3 +1,9 @@
+"""
+Code adapted from Gong et al. SpiralNet++ Pytorch implementation
+ https://github.com/sw-gong/spiralnet_plus
+"""
+
+
 import torch
 import torch.nn as nn
 from .mesh_blocks import SpiralEnblock
@@ -34,7 +40,7 @@ class SpiralNet(nn.Module):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("mesh",)
+        return ("data",)
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -58,7 +64,7 @@ class SpiralNet(nn.Module):
                 x = layer(x)
         return x
 
-    def forward(self, data, *indices):
+    def forward(self, data):
         z = self.encoder(data.x)
         out = self.clsf_out(z)
         return {"logits":out}

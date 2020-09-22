@@ -8,13 +8,12 @@ from torchvision import transforms
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
 from psbody.mesh import Mesh
-import shape_continuum.data_processing.mesh_sampling as mesh_sampling
+from ..data_processing import mesh_sampling
 
 DIAGNOSIS_CODES = {
     "CN": np.array(0, dtype=np.int64),
     "MCI": np.array(1, dtype=np.int64),
     "Dementia": np.array(2, dtype=np.int64),
-    "AD": np.array(2, dtype=np.int64)
 }
 
 AddChannelDim = transforms.Lambda(lambda x: x[np.newaxis])
@@ -60,52 +59,21 @@ class HDF5Dataset(Dataset):
         targets = []
         visits = []
         meta = {}
-        if dataset_name == "mesh":
-            with h5py.File(filename, "r") as hf:
-                #reading template from the hdf5
-                mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:].T)
-                _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
-                self.tmp = {
-                    'vertices': V,
-                    'face': F,
-                    'adj': A,
-                    'down_transform': D,
-                    'up_transform': U
-                }
+        with h5py.File(filename, "r") as hf:
+            for image_uid, g in hf.items():
+                if image_uid == "stats":
+                    continue
+                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
 
-                for image_uid, g in hf.items():
-                    if image_uid == "stats":
-                        continue
-                    visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+                targets.append(g.attrs["DX"])
+                img = g[roi][dataset_name][:]
+                data.append(img)
 
-
-                    targets.append(g.attrs["DX"])
-
-                    face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
-                    x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype('float32'))
-
-                    edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
-                    edge_index = to_undirected(edge_index)
-                    y = g.attrs["DX"]
-                    y = self.target_transform(y)
-                    img = Data(x=x, y=y,edge_index=edge_index, face=face)
-                    data.append(img)
-        else:
-            with h5py.File(filename, "r") as hf:
-                for image_uid, g in hf.items():
-                    if image_uid == "stats":
-                        continue
-                    visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
-
-                    targets.append(g.attrs["DX"])
-                    img = g[roi][dataset_name][:]
-                    data.append(img)
-
-                for key, value in hf["stats"][roi][dataset_name].items():
-                    if len(value.shape) > 0:
-                        meta[key] = value[:]
-                    else:
-                        meta[key] = np.array(value, dtype=value.dtype)
+            for key, value in hf["stats"][roi][dataset_name].items():
+                if len(value.shape) > 0:
+                    meta[key] = value[:]
+                else:
+                    meta[key] = np.array(value, dtype=value.dtype)
 
         self.data = data
         self.targets = targets
@@ -125,6 +93,75 @@ class HDF5Dataset(Dataset):
             target = self.target_transform(target)
 
         return img, target
+
+
+class HDF5DatasetMesh(HDF5Dataset):
+    """
+    HDF5Dataset Subclass specific for loading triangular meshes (based on code by Gong et al. https://github.com/sw-gong/spiralnet_plus)
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      dataset_name (str):
+        Name of the dataset to load (e.g. 'pointcloud', 'mask', 'vol_with_bg').
+      transform (callable):
+        Optional; A function that takes an individual data point
+        (e.g. images, point clouds) and returns transformed version.
+      target_transform (callable):
+        Optional; A function that takes in a diagnosis (DX) label and
+        transforms it.
+      ds_factor (list[int]): down sampling factor in each pooling layer.
+
+    """
+    def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
+        self.transform = transform
+        self.target_transform = target_transform
+        self._load(filename, dataset_name)
+        self.ds_factors = ds_factors
+
+    def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
+        data = []
+        targets = []
+        visits = []
+        meta = {}
+        with h5py.File(filename, "r") as hf:
+            #reading template from the hdf5
+            mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:].T)
+            _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
+            self.template = {
+                'vertices': V,
+                'face': F,
+                'adj': A,
+                'down_transform': D,
+                'up_transform': U
+            }
+
+            for image_uid, g in hf.items():
+                if image_uid == "stats":
+                    continue
+                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+
+
+                targets.append(g.attrs["DX"])
+
+                face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
+                x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype('float32'))
+
+                edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
+                edge_index = to_undirected(edge_index)
+                y = g.attrs["DX"]
+                y = self.target_transform(y)
+                img = Data(x=x, y=y,edge_index=edge_index, face=face)
+                data.append(img)
+            for key, value in hf["stats"][roi][dataset_name].items():
+                if len(value.shape) > 0:
+                    meta[key] = value[:]
+                else:
+                    meta[key] = np.array(value, dtype=value.dtype)
+        self.data = data
+        self.targets = targets
+        self.visits = visits
+        self.meta = meta
+
 
 
 def _get_image_dataset_transform(
@@ -300,7 +337,7 @@ def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="p
 
     return ds
 
-def _get_mesh_transform(norm: Optional[float], transpose: bool):
+def _get_mesh_transform():
     mesh_transforms = []
 
     #ToDo: look for the transforms needed for the mesh
@@ -326,18 +363,17 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
         Dataset iterating over tuples of 3D ndarray and diagnosis.
       transform_kwargs (dict):
         A dict with arguments used for creating mesh transform pipeline.
+      template (dict):
+        dataset template (vertices and faces) as well as the down_sampling and up_sampling transform matrices
     """
     target_transform = transforms.Compose([LabelsToIndex, AsTensor])
 
     ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
-    tmp = ds.tmp
-    transform_kwargs = {
-        "norm": 1,
-        "transpose": True,
-    }
+    template = ds.template
+    transform_kwargs = {}
     ds.transform = _get_mesh_transform(**transform_kwargs)
 
-    return ds,transform_kwargs,tmp
+    return ds,transform_kwargs,template
 
 def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.

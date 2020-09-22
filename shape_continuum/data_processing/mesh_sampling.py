@@ -1,3 +1,10 @@
+"""
+Code adapted from Gong et al. SpiralNet++ Pytorch implementation
+ https://github.com/sw-gong/spiralnet_plus
+"""
+
+
+
 import math
 import heapq
 import numpy as np
