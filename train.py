@@ -268,7 +268,7 @@ class MeshModelFactory(BaseModelFactory):
                 mesh_utils.to_sparse(down_transform).to(device) for down_transform in self.template["down_transform"]
             ]
             return mesh_networks.SpiralNet(
-                in_channels, out_channels, latent_channels, spiral_indices_list, down_transform_list
+                in_channels, out_channels, latent_channels, spiral_indices_list, down_transform_list, args.num_classes
             )
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))

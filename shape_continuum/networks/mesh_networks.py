@@ -19,7 +19,7 @@ class SpiralNet(nn.Module):
         latent_channels: int,
         spiral_indices: Sequence[torch.Tensor],
         down_transform: Sequence[torch.sparse.FloatTensor],
-        num_classes: int = 3,
+        num_outputs: int,
     ) -> None:
         super(SpiralNet, self).__init__()
         self.in_channels = in_channels
@@ -38,7 +38,7 @@ class SpiralNet(nn.Module):
                 en_block = SpiralEnblock(out_channels[idx - 1], out_channels[idx], self.spiral_indices[idx])
             self.en_layers.append(en_block)
         self.en_layers.append(nn.Linear(self.num_vert * out_channels[-1], latent_channels))
-        self.clsf_out = torch.nn.Linear(latent_channels, num_classes)
+        self.clsf_out = torch.nn.Linear(latent_channels, num_outputs)
 
         self.reset_parameters()
 
