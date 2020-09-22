@@ -7,7 +7,6 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
 
 import heapq
 import math
-import os
 
 import numpy as np
 import scipy.sparse as sp
