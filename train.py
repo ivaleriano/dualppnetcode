@@ -264,13 +264,13 @@ class PointCloudModelFactory(BaseModelFactory):
 class MeshModelFactory(BaseModelFactory):
     def get_data(self):
         args = self.args
-        train_data, transform_kwargs,tmp = adni_hdf.get_mesh_dataset_for_train(args.train_data)
+        train_data, transform_kwargs,template = adni_hdf.get_mesh_dataset_for_train(args.train_data)
         trainDataLoader = MeshNamedDataLoader(
             train_data, output_names=["mesh", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
         eval_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
         valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"],batch_size=args.batchsize)
-        self.tmp = tmp
+        self.template = template
         return trainDataLoader, valDataLoader
 
     def get_model(self):
@@ -285,14 +285,14 @@ class MeshModelFactory(BaseModelFactory):
             device = torch.device("cuda")
             #Creating the spiral sequences and the downsample matrices
             spiral_indices_list = [
-                mesh_utils.preprocess_spiral(self.tmp["face"][idx], seq_length[idx],
-                                             self.tmp["vertices"][idx],
+                mesh_utils.preprocess_spiral(self.template["face"][idx], seq_length[idx],
+                                             self.template["vertices"][idx],
                                              dilation[idx]).to(device)
-                for idx in range(len(self.tmp["face"]) - 1)
+                for idx in range(len(self.template["face"]) - 1)
             ]
             down_transform_list = [
                 mesh_utils.to_sparse(down_transform).to(device)
-                for down_transform in self.tmp["down_transform"]
+                for down_transform in self.template["down_transform"]
             ]
             return mesh_networks.SpiralNet(in_channels, out_channels, latent_channels,
            spiral_indices_list, down_transform_list)
