@@ -368,7 +368,7 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
     """
     target_transform = transforms.Compose([LabelsToIndex, AsTensor])
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5DatasetMesh(filename, dataset_name, target_transform=target_transform)
     template = ds.template
     transform_kwargs = {}
     ds.transform = _get_mesh_transform(**transform_kwargs)
@@ -393,7 +393,7 @@ def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
     """
     target_transform = transforms.Compose([LabelsToIndex, AsTensor])
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5DatasetMesh(filename, dataset_name, target_transform=target_transform)
 
     ds.transform = _get_mesh_transform(**transform_kwargs)
 

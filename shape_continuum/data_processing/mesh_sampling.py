@@ -279,6 +279,9 @@ def _get_sparse_transform(faces, num_original_verts):
 def generate_transform_matrices(mesh, factors):
     """Generates len(factors) meshes, each of them is scaled by factors[i] and
        computes the transformations between them.
+    Inputs:
+    mesh: psbody Mesh instance
+    factors: list[float] containing the downsampling factors
 
     Returns:
        M: a set of meshes downsampled from mesh by a factor specified in factors.
