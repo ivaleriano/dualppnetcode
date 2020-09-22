@@ -29,6 +29,7 @@ def collate(data_list):
 
     return batch_mesh, batch_mesh.y
 
+
 class LossWrapper(BaseModel):
     """Wraps an existing torch Module by given inputs and outputs names.
 
@@ -113,10 +114,9 @@ class NamedDataLoader(DataLoader):
         return self._output_names
 
 
-
 class MeshNamedDataLoader(DataLoader):
     def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
-        super().__init__(dataset=dataset,collate_fn=collate, **kwargs)
+        super().__init__(dataset=dataset, collate_fn=collate, **kwargs)
         self._output_names = output_names
 
     @property

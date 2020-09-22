@@ -3,8 +3,6 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
  https://github.com/sw-gong/spiralnet_plus
 """
 
-
-
 import heapq
 import math
 
@@ -62,19 +60,14 @@ def vertex_quadrics(mesh):
     """
 
     # Allocate quadrics
-    v_quadrics = np.zeros((
-        len(mesh.v),
-        4,
-        4,
-    ))
+    v_quadrics = np.zeros((len(mesh.v), 4, 4))
 
     # For each face...
     for f_idx in range(len(mesh.f)):
 
         # Compute normalized plane equation for that face
         vert_idxs = mesh.f[f_idx]
-        verts = np.hstack((mesh.v[vert_idxs], np.array([1, 1,
-                                                        1]).reshape(-1, 1)))
+        verts = np.hstack((mesh.v[vert_idxs], np.array([1, 1, 1]).reshape(-1, 1)))
         u, s, v = np.linalg.svd(verts)
         eq = v[-1, :].reshape(-1, 1)
         eq = eq / (np.linalg.norm(eq[0:3]))
@@ -91,10 +84,9 @@ def setup_deformation_transfer(source, target, use_normals=False):
     rows = np.zeros(3 * target.v.shape[0])
     cols = np.zeros(3 * target.v.shape[0])
     coeffs_v = np.zeros(3 * target.v.shape[0])
-    coeffs_n = np.zeros(3 * target.v.shape[0])
+    # coeffs_n = np.zeros(3 * target.v.shape[0])
 
-    nearest_faces, nearest_parts, nearest_vertices = source.compute_aabb_tree(
-    ).nearest(target.v, True)
+    nearest_faces, nearest_parts, nearest_vertices = source.compute_aabb_tree().nearest(target.v, True)
     nearest_faces = nearest_faces.ravel().astype(np.int64)
     nearest_parts = nearest_parts.ravel().astype(np.int64)
     nearest_vertices = nearest_vertices.ravel()
@@ -106,23 +98,21 @@ def setup_deformation_transfer(source, target, use_normals=False):
         nearest_f = source.f[f_id]
 
         # Closest surface point
-        nearest_v = nearest_vertices[3 * i:3 * i + 3]
+        nearest_v = nearest_vertices[3 * i : 3 * i + 3]
         # Distance vector to the closest surface point
-        dist_vec = target.v[i] - nearest_v
+        # dist_vec = target.v[i] - nearest_v
 
-        rows[3 * i:3 * i + 3] = i * np.ones(3)
-        cols[3 * i:3 * i + 3] = nearest_f
+        rows[3 * i : 3 * i + 3] = i * np.ones(3)
+        cols[3 * i : 3 * i + 3] = nearest_f
 
         n_id = nearest_parts[i]
         if n_id == 0:
             # Closest surface point in triangle
             A = np.vstack((source.v[nearest_f])).T
-            coeffs_v[3 * i:3 * i + 3] = np.linalg.lstsq(A, nearest_v,
-                                                        rcond=-1)[0]
+            coeffs_v[3 * i : 3 * i + 3] = np.linalg.lstsq(A, nearest_v, rcond=-1)[0]
         elif n_id > 0 and n_id <= 3:
             # Closest surface point on edge
-            A = np.vstack((source.v[nearest_f[n_id - 1]],
-                           source.v[nearest_f[n_id % 3]])).T
+            A = np.vstack((source.v[nearest_f[n_id - 1]], source.v[nearest_f[n_id % 3]])).T
             tmp_coeffs = np.linalg.lstsq(A, target.v[i], rcond=-1)[0]
             coeffs_v[3 * i + n_id - 1] = tmp_coeffs[0]
             coeffs_v[3 * i + n_id % 3] = tmp_coeffs[1]
@@ -130,8 +120,7 @@ def setup_deformation_transfer(source, target, use_normals=False):
             # Closest surface point a vertex
             coeffs_v[3 * i + n_id - 4] = 1.0
 
-    matrix = sp.csc_matrix((coeffs_v, (rows, cols)),
-                           shape=(target.v.shape[0], source.v.shape[0]))
+    matrix = sp.csc_matrix((coeffs_v, (rows, cols)), shape=(target.v.shape[0], source.v.shape[0]))
     return matrix
 
 
@@ -146,7 +135,7 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
     """
 
     if factor is None and n_verts_desired is None:
-        raise Exception('Need either factor or n_verts_desired.')
+        raise ValueError("Need either factor or n_verts_desired.")
 
     if n_verts_desired is None:
         n_verts_desired = math.ceil(len(mesh.v) * factor)
@@ -161,8 +150,8 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
     #     vert_adj[mesh.f[f_idx], mesh.f[f_idx]] = 1
 
     vert_adj = sp.csc_matrix(
-        (vert_adj[:, 0] * 0 + 1, (vert_adj[:, 0], vert_adj[:, 1])),
-        shape=(len(mesh.v), len(mesh.v)))
+        (vert_adj[:, 0] * 0 + 1, (vert_adj[:, 0], vert_adj[:, 1])), shape=(len(mesh.v), len(mesh.v))
+    )
     vert_adj = vert_adj + vert_adj.T
     vert_adj = vert_adj.tocoo()
 
@@ -174,10 +163,10 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
         destroy_c_cost = p1.T.dot(Qsum).dot(p1)
         destroy_r_cost = p2.T.dot(Qsum).dot(p2)
         result = {
-            'destroy_c_cost': destroy_c_cost,
-            'destroy_r_cost': destroy_r_cost,
-            'collapse_cost': min([destroy_c_cost, destroy_r_cost]),
-            'Qsum': Qsum
+            "destroy_c_cost": destroy_c_cost,
+            "destroy_r_cost": destroy_r_cost,
+            "collapse_cost": min([destroy_c_cost, destroy_r_cost]),
+            "Qsum": Qsum,
         }
         return result
 
@@ -190,7 +179,7 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
         if r > c:
             continue
 
-        cost = collapse_cost(Qv, r, c, mesh.v)['collapse_cost']
+        cost = collapse_cost(Qv, r, c, mesh.v)["collapse_cost"]
         heapq.heappush(queue, (cost, (r, c)))
 
     # decimate
@@ -205,15 +194,15 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
             continue
 
         cost = collapse_cost(Qv, r, c, mesh.v)
-        if cost['collapse_cost'] > e[0]:
-            heapq.heappush(queue, (cost['collapse_cost'], e[1]))
+        if cost["collapse_cost"] > e[0]:
+            heapq.heappush(queue, (cost["collapse_cost"], e[1]))
             # print 'found outdated cost, %.2f < %.2f' % (e[0], cost['collapse_cost'])
             continue
         else:
 
             # update old vert idxs to new one,
             # in queue and in face list
-            if cost['destroy_c_cost'] < cost['destroy_r_cost']:
+            if cost["destroy_c_cost"] < cost["destroy_r_cost"]:
                 to_destroy = c
                 to_keep = r
             else:
@@ -226,21 +215,15 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
             np.place(faces, faces == to_destroy, to_keep)
 
             # same for queue
-            which1 = [
-                idx for idx in range(len(queue))
-                if queue[idx][1][0] == to_destroy
-            ]
-            which2 = [
-                idx for idx in range(len(queue))
-                if queue[idx][1][1] == to_destroy
-            ]
+            which1 = [idx for idx in range(len(queue)) if queue[idx][1][0] == to_destroy]
+            which2 = [idx for idx in range(len(queue)) if queue[idx][1][1] == to_destroy]
             for k in which1:
                 queue[k] = (queue[k][0], (to_keep, queue[k][1][1]))
             for k in which2:
                 queue[k] = (queue[k][0], (queue[k][1][0], to_keep))
 
-            Qv[r, :, :] = cost['Qsum']
-            Qv[c, :, :] = cost['Qsum']
+            Qv[r, :, :] = cost["Qsum"]
+            Qv[c, :, :] = cost["Qsum"]
 
             a = faces[:, 0] == faces[:, 1]
             b = faces[:, 1] == faces[:, 2]
@@ -253,7 +236,7 @@ def qslim_decimator_transformer(mesh, factor=None, n_verts_desired=None):
             faces_to_keep = np.logical_not(logical_or3(a, b, c))
             faces = faces[faces_to_keep, :].copy()
 
-        nverts_total = (len(np.unique(faces.flatten())))
+        nverts_total = len(np.unique(faces.flatten()))
 
     new_faces, mtx = _get_sparse_transform(faces, len(mesh.v))
     return new_faces, mtx
@@ -270,10 +253,9 @@ def _get_sparse_transform(faces, num_original_verts):
     new_faces = mp[faces.copy().flatten()].reshape((-1, 3))
 
     ij = np.vstack((IS.flatten(), JS.flatten()))
-    mtx = sp.csc_matrix((data, ij),
-                        shape=(len(verts_left), num_original_verts))
+    mtx = sp.csc_matrix((data, ij), shape=(len(verts_left), num_original_verts))
 
-    return (new_faces, mtx)
+    return new_faces, mtx
 
 
 def generate_transform_matrices(mesh, factors):
@@ -295,19 +277,18 @@ def generate_transform_matrices(mesh, factors):
     M, A, D, U, F, V = [], [], [], [], [], []
     F.append(mesh.f)  # F[0]
     V.append(mesh.v)
-    A.append(get_vert_connectivity(mesh.v, mesh.f).astype('float32'))  # A[0]
+    A.append(get_vert_connectivity(mesh.v, mesh.f).astype(np.float32))  # A[0]
     M.append(mesh)  # M[0]
 
     for factor in factors:
         ds_f, ds_D = qslim_decimator_transformer(M[-1], factor=factor)
-        D.append(ds_D.astype('float32'))
+        D.append(ds_D.astype(np.float32))
         new_mesh_v = ds_D.dot(M[-1].v)
         new_mesh = Mesh(v=new_mesh_v, f=ds_f)
         F.append(new_mesh.f)
         V.append(new_mesh.v)
         M.append(new_mesh)
-        A.append(
-            get_vert_connectivity(new_mesh.v, new_mesh.f).astype('float32'))
-        U.append(setup_deformation_transfer(M[-1], M[-2]).astype('float32'))
+        A.append(get_vert_connectivity(new_mesh.v, new_mesh.f).astype(np.float32))
+        U.append(setup_deformation_transfer(M[-1], M[-2]).astype(np.float32))
 
     return M, A, D, U, F, V
