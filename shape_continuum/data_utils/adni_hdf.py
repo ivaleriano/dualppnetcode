@@ -14,7 +14,6 @@ DIAGNOSIS_CODES = {
     "CN": np.array(0, dtype=np.int64),
     "MCI": np.array(1, dtype=np.int64),
     "Dementia": np.array(2, dtype=np.int64),
-    "AD": np.array(2, dtype=np.int64)
 }
 
 AddChannelDim = transforms.Lambda(lambda x: x[np.newaxis])
@@ -49,11 +48,11 @@ class HDF5Dataset(Dataset):
         transforms it.
     """
 
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None):
+    def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
         self.transform = transform
         self.target_transform = target_transform
         self._load(filename, dataset_name)
-
+        self.ds_factors = ds_factors
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
@@ -116,11 +115,8 @@ class HDF5DatasetMesh(HDF5Dataset):
     def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
         self.transform = transform
         self.target_transform = target_transform
-        self.ds_factors = ds_factors
         self._load(filename, dataset_name)
-        super().__init__(filename, dataset_name, transform, target_transform)
-
-
+        self.ds_factors = ds_factors
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
@@ -156,11 +152,11 @@ class HDF5DatasetMesh(HDF5Dataset):
                 y = self.target_transform(y)
                 img = Data(x=x, y=y,edge_index=edge_index, face=face)
                 data.append(img)
-            # for key, value in hf["stats"][roi][dataset_name].items():
-            #     if len(value.shape) > 0:
-            #         meta[key] = value[:]
-            #     else:
-            #         meta[key] = np.array(value, dtype=value.dtype)
+            for key, value in hf["stats"][roi][dataset_name].items():
+                if len(value.shape) > 0:
+                    meta[key] = value[:]
+                else:
+                    meta[key] = np.array(value, dtype=value.dtype)
         self.data = data
         self.targets = targets
         self.visits = visits

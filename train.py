@@ -9,46 +9,31 @@ import torch
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 
-from shape_continuum.data_utils import adni_hdf
+from shape_continuum.data_utils import adni_hdf, mesh_utils
 from shape_continuum.models.base import BaseModel
-from shape_continuum.networks import point_networks, vol_networks,mesh_networks
+from shape_continuum.networks import mesh_networks, point_networks, vol_networks
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
 from shape_continuum.training.metrics import Accuracy, Mean, Metric
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
-from shape_continuum.training.wrappers import LossWrapper, NamedDataLoader,MeshNamedDataLoader
-import shape_continuum.data_utils.mesh_utils as mesh_utils
+from shape_continuum.training.wrappers import LossWrapper, MeshNamedDataLoader, NamedDataLoader
 
 
 def create_parser():
     parser = argparse.ArgumentParser("PointNet")
     parser.add_argument("--batchsize", type=int, default=20, help="input batch size")
-    parser.add_argument(
-        "--workers", type=int, default=4, help="number of data loading workers"
-    )
-    parser.add_argument(
-        "--epoch", type=int, default=200, help="number of epochs for training"
-    )
-    parser.add_argument(
-        "--num_points", type=int, default=1500, help="number of epochs for training"
-    )
+    parser.add_argument("--workers", type=int, default=4, help="number of data loading workers")
+    parser.add_argument("--epoch", type=int, default=200, help="number of epochs for training")
+    parser.add_argument("--num_points", type=int, default=1500, help="number of epochs for training")
     parser.add_argument("--pretrain", type=Path, help="whether use pretrain model")
-    parser.add_argument(
-        "--learning_rate", type=float, default=0.001, help="learning rate for training"
-    )
+    parser.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
     parser.add_argument("--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer")
     parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
+    parser.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
+    parser.add_argument("--test_data", type=Path, required=True, help="path to testing dataset")
     parser.add_argument(
-        "--train_data", type=Path, required=True, help="path to training dataset"
-    )
-    parser.add_argument(
-        "--test_data", type=Path, required=True, help="path to testing dataset"
-    )
-    parser.add_argument(
-        "--discriminator_net",
-        default="pointnet",
-        help="which architecture to use for discriminator",
+        "--discriminator_net", default="pointnet", help="which architecture to use for discriminator",
     )
     parser.add_argument(
         "--shape",
@@ -64,16 +49,10 @@ def create_parser():
         help="True if input a particular name for the experiment (default False: current date and time)",
     )
     parser.add_argument(
-        "--tb_comment",
-        action="store_true",
-        default=False,
-        help="any comment for storing on tensorboard",
+        "--tb_comment", action="store_true", default=False, help="any comment for storing on tensorboard",
     )
     parser.add_argument(
-        "--tensorboard",
-        action="store_true",
-        default=False,
-        help="visualize training progress on tensorboard",
+        "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
 
     return parser
@@ -139,11 +118,7 @@ class BaseModelFactory(metaclass=ABCMeta):
             optimizerD = torch.optim.SGD(params, lr=0.01, momentum=0.9)
         elif args.optimizer == "Adam":
             optimizerD = torch.optim.Adam(
-                params,
-                lr=args.learning_rate,
-                betas=(0.9, 0.999),
-                eps=1e-08,
-                weight_decay=args.decay_rate,
+                params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
             )
         else:
             raise ValueError(f"unknown optimizer {args.optimizer}")
@@ -264,38 +239,37 @@ class PointCloudModelFactory(BaseModelFactory):
 class MeshModelFactory(BaseModelFactory):
     def get_data(self):
         args = self.args
-        train_data, transform_kwargs,template = adni_hdf.get_mesh_dataset_for_train(args.train_data)
+        train_data, transform_kwargs, template = adni_hdf.get_mesh_dataset_for_train(args.train_data)
         trainDataLoader = MeshNamedDataLoader(
             train_data, output_names=["mesh", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
         eval_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
-        valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"],batch_size=args.batchsize)
+        valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"], batch_size=args.batchsize)
         self.template = template
         return trainDataLoader, valDataLoader
 
     def get_model(self):
         args = self.args
-        use_batch_norm = args.batchsize > 1
         if args.discriminator_net == "spiralnet":
-            in_channels=3
-            seq_length = [9,9]
+            in_channels = 3
+            seq_length = [9, 9]
             latent_channels = 32
-            out_channels=[16,16]
-            dilation=[1,1]
+            out_channels = [16, 16]
+            dilation = [1, 1]
             device = torch.device("cuda")
-            #Creating the spiral sequences and the downsample matrices
+            # Creating the spiral sequences and the downsample matrices
             spiral_indices_list = [
-                mesh_utils.preprocess_spiral(self.template["face"][idx], seq_length[idx],
-                                             self.template["vertices"][idx],
-                                             dilation[idx]).to(device)
+                mesh_utils.preprocess_spiral(
+                    self.template["face"][idx], seq_length[idx], self.template["vertices"][idx], dilation[idx]
+                ).to(device)
                 for idx in range(len(self.template["face"]) - 1)
             ]
             down_transform_list = [
-                mesh_utils.to_sparse(down_transform).to(device)
-                for down_transform in self.template["down_transform"]
+                mesh_utils.to_sparse(down_transform).to(device) for down_transform in self.template["down_transform"]
             ]
-            return mesh_networks.SpiralNet(in_channels, out_channels, latent_channels,
-           spiral_indices_list, down_transform_list)
+            return mesh_networks.SpiralNet(
+                in_channels, out_channels, latent_channels, spiral_indices_list, down_transform_list, args.num_classes
+            )
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
@@ -328,9 +302,7 @@ def main(args=None):
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
 
-    train_hooks = [
-        CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)
-    ]
+    train_hooks = [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
     eval_hooks = None
     if args.tensorboard:
         if args.tb_comment:
@@ -342,8 +314,6 @@ def main(args=None):
 
         eval_metrics = factory.get_metrics()
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics)]
-
-
 
     train_and_evaluate(
         model=discriminator,

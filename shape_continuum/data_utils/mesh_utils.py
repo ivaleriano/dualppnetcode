@@ -3,17 +3,17 @@ Code adapted from Gong et al. SpiralNet++ Pytorch implementation
  https://github.com/sw-gong/spiralnet_plus
 """
 
-
-import torch
 import numpy as np
 import openmesh as om
+import torch
 from sklearn.neighbors import KDTree
+
 
 def _next_ring(mesh, last_ring, other):
     res = []
 
     def is_new_vertex(idx):
-        return (idx not in last_ring and idx not in other and idx not in res)
+        return (idx not in last_ring) and (idx not in other) and (idx not in res)
 
     for vh1 in last_ring:
         vh1 = om.VertexHandle(vh1)
@@ -53,20 +53,21 @@ def extract_spirals(mesh, seq_length, dilation=1):
         if len(next_ring) > 0:
             spiral.extend(next_ring)
         else:
-            kdt = KDTree(mesh.points(), metric='euclidean')
-            spiral = kdt.query(np.expand_dims(mesh.points()[spiral[0]],
-                                              axis=0),
-                               k=seq_length * dilation,
-                               return_distance=False).tolist()
+            kdt = KDTree(mesh.points(), metric="euclidean")
+            spiral = kdt.query(
+                np.expand_dims(mesh.points()[spiral[0]], axis=0), k=seq_length * dilation, return_distance=False
+            ).tolist()
             spiral = [item for subspiral in spiral for item in subspiral]
-        spirals.append(spiral[:seq_length * dilation][::dilation])
+        spirals.append(spiral[: seq_length * dilation][::dilation])
     return spirals
+
 
 def to_sparse(spmat):
     return torch.sparse.FloatTensor(
-        torch.LongTensor([spmat.tocoo().row,
-                          spmat.tocoo().col]),
-        torch.FloatTensor(spmat.tocoo().data), torch.Size(spmat.tocoo().shape))
+        torch.LongTensor([spmat.tocoo().row, spmat.tocoo().col]),
+        torch.FloatTensor(spmat.tocoo().data),
+        torch.Size(spmat.tocoo().shape),
+    )
 
 
 def to_edge_index(mat):
@@ -80,6 +81,5 @@ def preprocess_spiral(face, seq_length, vertices=None, dilation=1):
     else:
         n_vertices = face.max() + 1
         mesh = om.TriMesh(np.ones([n_vertices, 3]), np.array(face))
-    spirals = torch.tensor(
-        extract_spirals(mesh, seq_length=seq_length, dilation=dilation))
+    spirals = torch.tensor(extract_spirals(mesh, seq_length=seq_length, dilation=dilation))
     return spirals

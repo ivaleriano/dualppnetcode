@@ -1,12 +1,12 @@
 from typing import Optional, Sequence
 
+import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import default_collate
+from torch_geometric.data import Batch
 
-from torch_geometric.data import Data, Batch
 from ..models.base import BaseModel
-import torch
 
 
 def collate(data_list):
@@ -32,6 +32,7 @@ def collate(data_list):
     batch_mesh.batch = torch.cat(batch_mesh.batch, dim=0)
 
     return batch_mesh, batch_mesh.y
+
 
 class LossWrapper(BaseModel):
     """Wraps an existing torch Module by given inputs and outputs names.
@@ -117,10 +118,9 @@ class NamedDataLoader(DataLoader):
         return self._output_names
 
 
-
 class MeshNamedDataLoader(DataLoader):
     def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
-        super().__init__(dataset=dataset,collate_fn=collate, **kwargs)
+        super().__init__(dataset=dataset, collate_fn=collate, **kwargs)
         self._output_names = output_names
 
     @property
