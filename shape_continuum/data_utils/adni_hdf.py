@@ -48,11 +48,11 @@ class HDF5Dataset(Dataset):
         transforms it.
     """
 
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
+    def __init__(self, filename, dataset_name, transform=None, target_transform=None):
         self.transform = transform
         self.target_transform = target_transform
         self._load(filename, dataset_name)
-        self.ds_factors = ds_factors
+
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
@@ -112,11 +112,13 @@ class HDF5DatasetMesh(HDF5Dataset):
       ds_factor (list[int]): down sampling factor in each pooling layer.
 
     """
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None,ds_factors=[4,4]):
+    def __init__(self, filename, dataset_name, transform=None, target_transform=None, ds_factors=[4, 4]):
         self.transform = transform
         self.target_transform = target_transform
-        self._load(filename, dataset_name)
         self.ds_factors = ds_factors
+        self._load(filename, dataset_name)
+
+
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
