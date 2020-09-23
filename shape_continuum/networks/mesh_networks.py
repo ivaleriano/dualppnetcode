@@ -40,7 +40,7 @@ class SpiralNet(nn.Module):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("data",)
+        return ("mesh",)
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -64,7 +64,7 @@ class SpiralNet(nn.Module):
                 x = layer(x)
         return x
 
-    def forward(self, data):
-        z = self.encoder(data.x)
+    def forward(self, mesh):
+        z = self.encoder(mesh.x)
         out = self.clsf_out(z)
         return {"logits":out}

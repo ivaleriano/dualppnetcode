@@ -13,10 +13,14 @@ def collate(data_list):
     """
     Code adapted from Gong et al. SpiralNet++ Pytorch implementation
      https://github.com/sw-gong/spiralnet_plus
+
+     Notice that the standard HDF5Dataset get_item method returns two values (shape and target).
+     Since in case of meshes, Data also contains the labels, we do not need the second part the tuple in data_list.
+     We directly access batch.y to get the targets associated to that batch.
     """
     batch_mesh = Batch()
     batch_mesh.batch = []
-    data_list_mesh, data_list_target = map(list, zip(*data_list))
+    data_list_mesh, _ = map(list, zip(*data_list))
 
     for key in data_list_mesh[0].keys:
         batch_mesh[key] = default_collate([d[key] for d in data_list_mesh])
