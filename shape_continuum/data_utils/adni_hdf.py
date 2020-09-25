@@ -127,7 +127,7 @@ class HDF5DatasetMesh(HDF5Dataset):
         meta = {}
         with h5py.File(filename, "r") as hf:
             #reading template from the hdf5
-            mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:].T)
+            mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:])
             _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
             self.template = {
                 'vertices': V,
@@ -146,6 +146,7 @@ class HDF5DatasetMesh(HDF5Dataset):
                 targets.append(g.attrs["DX"])
 
                 face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
+                face = face.T
                 x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype('float32'))
 
                 edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
@@ -155,10 +156,11 @@ class HDF5DatasetMesh(HDF5Dataset):
                 img = Data(x=x, y=y,edge_index=edge_index, face=face)
                 data.append(img)
             for key, value in hf["stats"][roi][dataset_name].items():
-                if len(value.shape) > 0:
-                    meta[key] = value[:]
-                else:
-                    meta[key] = np.array(value, dtype=value.dtype)
+                if key.startswith("max_dist"):
+                    if len(value.shape) > 0:
+                        meta[key] = value[:]
+                    else:
+                        meta[key] = np.array(value, dtype=value.dtype)
         self.data = data
         self.targets = targets
         self.visits = visits
