@@ -175,7 +175,7 @@ def conv3d(in_channels, out_channels, kernel_size=3, stride=1):
 class ConvBnReLU(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
         super().__init__()
-        self.conv = conv3d(in_channels, out_channels, stride=stride)
+        self.conv = conv3d(in_channels, out_channels, kernel_size=kernel_size, stride=stride)
         self.bn = nn.BatchNorm3d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
