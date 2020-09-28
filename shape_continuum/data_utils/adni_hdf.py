@@ -3,11 +3,12 @@ from typing import Callable, Optional, Tuple
 import h5py
 import numpy as np
 import torch
+from psbody.mesh import Mesh
 from torch.utils.data import Dataset
-from torchvision import transforms
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
-from psbody.mesh import Mesh
+from torchvision import transforms
+
 from ..data_processing import mesh_sampling
 
 DIAGNOSIS_CODES = {
@@ -53,7 +54,6 @@ class HDF5Dataset(Dataset):
         self.target_transform = target_transform
         self._load(filename, dataset_name)
 
-
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
         targets = []
@@ -97,7 +97,10 @@ class HDF5Dataset(Dataset):
 
 class HDF5DatasetMesh(HDF5Dataset):
     """
-    HDF5Dataset Subclass specific for loading triangular meshes (based on code by Gong et al. https://github.com/sw-gong/spiralnet_plus)
+    HDF5Dataset Subclass specific for loading triangular meshes
+
+    (based on code by Gong et al. https://github.com/sw-gong/spiralnet_plus)
+
     Args:
       filename (str):
         Path to HDF5 file.
@@ -126,34 +129,30 @@ class HDF5DatasetMesh(HDF5Dataset):
         visits = []
         meta = {}
         with h5py.File(filename, "r") as hf:
-            #reading template from the hdf5
-            mesh = Mesh(v=hf['stats'][roi][dataset_name]['template']['vertices'][:], f=hf['stats'][roi][dataset_name]['template']['faces'][:])
+            # reading template from the hdf5
+            mesh = Mesh(
+                v=hf["stats"][roi][dataset_name]["template"]["vertices"][:],
+                f=hf["stats"][roi][dataset_name]["template"]["faces"][:],
+            )
             _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
-            self.template = {
-                'vertices': V,
-                'face': F,
-                'adj': A,
-                'down_transform': D,
-                'up_transform': U
-            }
+            self.template = {"vertices": V, "face": F, "adj": A, "down_transform": D, "up_transform": U}
 
             for image_uid, g in hf.items():
                 if image_uid == "stats":
                     continue
                 visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
 
-
                 targets.append(g.attrs["DX"])
 
                 face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
                 face = face.T
-                x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype('float32'))
+                x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype(np.float32))
 
                 edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
                 edge_index = to_undirected(edge_index)
                 y = g.attrs["DX"]
                 y = self.target_transform(y)
-                img = Data(x=x, y=y,edge_index=edge_index, face=face)
+                img = Data(x=x, y=y, edge_index=edge_index, face=face)
                 data.append(img)
             for key, value in hf["stats"][roi][dataset_name].items():
                 if key.startswith("max_dist"):
@@ -165,7 +164,6 @@ class HDF5DatasetMesh(HDF5Dataset):
         self.targets = targets
         self.visits = visits
         self.meta = meta
-
 
 
 def _get_image_dataset_transform(
@@ -341,14 +339,13 @@ def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="p
 
     return ds
 
+
 def _get_mesh_transform():
     mesh_transforms = []
 
-    #ToDo: look for the transforms needed for the mesh
-
+    # TODO: look for the transforms needed for the mesh
 
     return transforms.Compose(mesh_transforms)
-
 
 
 def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
@@ -377,7 +374,8 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
     transform_kwargs = {}
     ds.transform = _get_mesh_transform(**transform_kwargs)
 
-    return ds,transform_kwargs,template
+    return ds, transform_kwargs, template
+
 
 def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
