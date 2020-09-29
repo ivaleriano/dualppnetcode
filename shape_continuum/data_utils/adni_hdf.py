@@ -120,7 +120,6 @@ class HDF5DatasetMesh(HDF5Dataset):
         super().__init__(
             filename=filename, dataset_name=dataset_name, transform=transform, target_transform=target_transform
         )
-        self.ds_factors = ds_factors
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
