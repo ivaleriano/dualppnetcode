@@ -37,11 +37,11 @@ def create_parser():
     )
     parser.add_argument(
         "--shape",
-        default="pointcloud_fsl",
+        default="pointcloud",
         help="which shape representation to use "
-        "(pointcloud_free,pointcloud_fsl,mesh_fsl,vol_mask_free,vol_bb_nobg,vol_bb_wbg",
+        "(pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
     )
-    parser.add_argument("--num_classes", type=int, default=2, help="number of classes")
+    parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
     parser.add_argument(
         "--experiment_name",
         action="store_true",
@@ -301,19 +301,21 @@ def main(args=None):
     discriminator = factory.get_and_init_model()
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
-
-    train_hooks = [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
-    eval_hooks = None
+    train_metrics = factory.get_metrics()
+    train_hooks = [] #[CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
+    eval_hooks = []
+    eval_metrics = factory.get_metrics()
     if args.tensorboard:
         if args.tb_comment:
             comment = input("comment to add to TB visualization: ")
             tb_log_dir /= comment
 
-        train_metrics = factory.get_metrics()
+
         train_hooks.append(TensorBoardLogger(str(tb_log_dir / "train"), train_metrics))
 
-        eval_metrics = factory.get_metrics()
+
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics)]
+    eval_hooks.append(CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5,metrics=eval_metrics,save_best=True))
 
     train_and_evaluate(
         model=discriminator,

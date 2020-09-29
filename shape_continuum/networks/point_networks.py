@@ -38,7 +38,7 @@ class PointNet(BaseModel):
         return outputs
 
 
-class PointNet2ClsMsg(nn.Module):
+class PointNet2ClsMsg(BaseModel):
     def __init__(self, num_outputs: int) -> None:
         super(PointNet2ClsMsg, self).__init__()
         self.sa1 = PointNetSetAbstractionMsg(
@@ -69,6 +69,7 @@ class PointNet2ClsMsg(nn.Module):
 
     def forward(self, pointcloud):
         B, _, _ = pointcloud.shape
+
         l1_xyz, l1_points = self.sa1(pointcloud, None)
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
         l3_xyz, l3_points = self.sa3(l2_xyz, l2_points)

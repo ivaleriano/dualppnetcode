@@ -34,10 +34,8 @@ class STN3d(nn.Module):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
-        x = self.mp1(x)
-        # print(x.size())
-        x, _ = torch.max(x, 2)
-        # print(x.size())
+
+        x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
         x = F.relu(self.fc1(x))
@@ -74,7 +72,6 @@ class Encoder_2f(nn.Module):
         self.trans = trans
         self.lat_feats = num_feats
 
-        self.mp1 = torch.nn.MaxPool1d(num_points)
         self.num_points = num_points
         self.global_feat = global_feat
 

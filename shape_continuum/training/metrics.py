@@ -30,6 +30,16 @@ class Metric(metaclass=ABCMeta):
           A Dict mapping a metric's name to its value.
         """
 
+    @abstractmethod
+    def is_best(self) -> bool:
+        """Compares current state of the metric to the best performed until the moment.
+
+        Returns (bool):
+          a Boolean: True if this is the best performance(according to metric) at the moment, or not.
+        """
+
+
+
 
 class Mean(Metric):
     """Computes the mean of the tensor with the given name.
@@ -51,6 +61,9 @@ class Mean(Metric):
     def reset(self) -> None:
         self._value = 0
         self._total = 0
+
+    def is_best(self) -> bool: #not interested in saving the this at the moment
+        return False
 
     def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
         value = outputs[self._tensor_name].detach().cpu()
@@ -75,14 +88,21 @@ class Accuracy(Metric):
         self._prediction = prediction
         self._target = target
         self._value = None
+        self._max_value = 0
+        self._is_max = False
 
     def values(self) -> Dict[str, float]:
         value = self._correct / self._total
+        self._is_max = value>self._max_value
         return {"accuracy": value}
 
     def reset(self) -> None:
         self._correct = 0
         self._total = 0
+
+    def is_best(self) -> bool:
+        return self._is_max
+
 
     def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
         target_tensor = inputs[self._target].detach().cpu()

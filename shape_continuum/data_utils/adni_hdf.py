@@ -116,6 +116,7 @@ class HDF5DatasetMesh(HDF5Dataset):
     """
 
     def __init__(self, filename, dataset_name, transform=None, target_transform=None, ds_factors=[4, 4]):
+        self.ds_factors = ds_factors
         super().__init__(
             filename=filename, dataset_name=dataset_name, transform=transform, target_transform=target_transform
         )
