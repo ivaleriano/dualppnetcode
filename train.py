@@ -31,6 +31,7 @@ def create_parser():
     parser.add_argument("--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer")
     parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
     parser.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
+    parser.add_argument("--val_data", type=Path, required=True, help="path to validation dataset")
     parser.add_argument("--test_data", type=Path, required=True, help="path to testing dataset")
     parser.add_argument(
         "--discriminator_net", default="pointnet", help="which architecture to use for discriminator",
@@ -182,7 +183,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         """Returns a model instance."""
 
     @abstractmethod
-    def get_data(self) -> Tuple[DataLoader, DataLoader]:
+    def get_data(self) -> Tuple[DataLoader, DataLoader,DataLoader]:
         """Returns a data loader instance for training and evaluation, respectively."""
 
 
@@ -196,9 +197,13 @@ class ImageModelFactory(BaseModelFactory):
             train_data, output_names=["image", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
 
-        eval_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
+        eval_data = adni_hdf.get_image_dataset_for_eval(args.val_data, transform_kwargs, args.shape)
         valDataLoader = NamedDataLoader(eval_data, output_names=["image", "target"], batch_size=args.batchsize)
-        return trainDataLoader, valDataLoader
+
+
+        test_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
+        testDataLoader = NamedDataLoader(test_data, output_names=["image", "target"], batch_size=args.batchsize)
+        return trainDataLoader, valDataLoader,testDataLoader
 
     def get_model(self):
         args = self.args
@@ -221,9 +226,13 @@ class PointCloudModelFactory(BaseModelFactory):
             train_data, output_names=["pointcloud", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
 
-        eval_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
+        eval_data = adni_hdf.get_point_cloud_dataset_for_eval(args.val_data, transform_kwargs)
         valDataLoader = NamedDataLoader(eval_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
-        return trainDataLoader, valDataLoader
+
+        test_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
+        testDataLoader = NamedDataLoader(test_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
+
+        return trainDataLoader, valDataLoader , testDataLoader
 
     def get_model(self):
         args = self.args
@@ -231,7 +240,7 @@ class PointCloudModelFactory(BaseModelFactory):
         if args.discriminator_net == "pointnet":
             return point_networks.PointNet(args.num_points, args.num_classes, use_batch_norm)
         elif args.discriminator_net == "pointnet++":
-            return point_networks.PointNet2ClsMsg(args.num_classes)
+            return point_networks.PointNet2ClsSsg(args.num_classes)
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
@@ -297,27 +306,26 @@ def main(args=None):
 
     factory.write_args(experiment_dir / "experiment_args.json")
 
-    trainDataLoader, valDataLoader = factory.get_data()
+    trainDataLoader, valDataLoader,testDataLoader = factory.get_data()
     discriminator = factory.get_and_init_model()
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
     train_metrics = factory.get_metrics()
     train_hooks = []  # [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
     eval_hooks = []
-    eval_metrics = factory.get_metrics()
+
     if args.tensorboard:
         if args.tb_comment:
             comment = input("comment to add to TB visualization: ")
             tb_log_dir /= comment
-
         train_hooks.append(TensorBoardLogger(str(tb_log_dir / "train"), train_metrics))
+        eval_metrics_tb = factory.get_metrics()
+        eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics_tb)]
+    eval_metrics_cp = factory.get_metrics()
+    eval_hooks.append(CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5,metrics=eval_metrics_cp,save_best=True))
 
-        eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics)]
-    eval_hooks.append(
-        CheckpointSaver(
-            discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics, save_best=True
-        )
-    )
+
+
 
     train_and_evaluate(
         model=discriminator,
@@ -331,6 +339,11 @@ def main(args=None):
         eval_hooks=eval_hooks,
         device=torch.device("cuda"),
     )
+
+    param_dict = args.__dict__
+    param_dict["num_parameters"] = get_number_of_parameters(discriminator)
+
+
 
 
 if __name__ == "__main__":

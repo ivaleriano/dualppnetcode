@@ -76,10 +76,11 @@ class CheckpointSaver(Hook):
     def after_step(self, outputs: Dict[str, Tensor]) -> None:
         if self._save_best and self._checkpoint_dir :
             self._forward("update", self._inputs, outputs)
-            self._save_best_models()
 
 
-
+    def on_begin_epoch(self) -> None:
+        if self._save_best and self._checkpoint_dir:
+            self._forward("reset")
 
 
     def on_end_epoch(self) -> None:
@@ -89,6 +90,8 @@ class CheckpointSaver(Hook):
             if self._max_keep is not None:
                 self._remove()
                 self._ckpkt_remove.append(ckpt_path)
+        if self._save_best and self._checkpoint_dir:
+            self._save_best_models()
 
 
 
