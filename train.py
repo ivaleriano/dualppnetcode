@@ -302,7 +302,7 @@ def main(args=None):
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
     train_metrics = factory.get_metrics()
-    train_hooks = [] #[CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
+    train_hooks = []  # [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
     eval_hooks = []
     eval_metrics = factory.get_metrics()
     if args.tensorboard:
@@ -310,12 +310,14 @@ def main(args=None):
             comment = input("comment to add to TB visualization: ")
             tb_log_dir /= comment
 
-
         train_hooks.append(TensorBoardLogger(str(tb_log_dir / "train"), train_metrics))
 
-
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics)]
-    eval_hooks.append(CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5,metrics=eval_metrics,save_best=True))
+    eval_hooks.append(
+        CheckpointSaver(
+            discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics, save_best=True
+        )
+    )
 
     train_and_evaluate(
         model=discriminator,
