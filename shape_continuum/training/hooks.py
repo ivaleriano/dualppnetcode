@@ -46,6 +46,8 @@ class CheckpointSaver(Hook):
         Base directory for the checkpoint files.
       metrics (list of Metric):
         Instances of metrics to compute. Used for keeping track of best performing model
+      save_best(boolean):
+        True if you want to save the best performing model for each metric
       save_every_n_epochs (int):
         Optional; Save every N steps.
       max_keep (int):
@@ -106,7 +108,7 @@ class CheckpointSaver(Hook):
     def _save_best_models(self):
         for m in self._metrics:
             if m.is_best():
-                for name, value in m.values().items():
+                for name in m.values().keys():
                     path = self._checkpoint_dir / "best_discriminator_{:}.pth".format(name)
                     torch.save(
                         self._model.state_dict(), path,
