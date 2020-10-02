@@ -321,9 +321,7 @@ def main(args=None):
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics_tb)]
     eval_metrics_cp = factory.get_metrics()
     eval_hooks.append(
-        CheckpointSaver(
-            discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics_cp, save_best=True
-        )
+        CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics_cp)
     )
 
     train_and_evaluate(
