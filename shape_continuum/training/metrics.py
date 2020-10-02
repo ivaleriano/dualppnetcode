@@ -82,6 +82,7 @@ class Accuracy(Metric):
         Name of the tensor witht the  ground truth. A tensor of
         the given name must be returned by the data loader.
     """
+
     def __init__(self, prediction: str, target: str) -> None:
         self._prediction = prediction
         self._target = target
@@ -125,6 +126,7 @@ class BalancedAccuracy(Metric):
         Name of the tensor witht the  ground truth. A tensor of
         the given name must be returned by the data loader.
     """
+
     def __init__(self, n_classes: int, prediction: str, target: str) -> None:
         self._n_classes = n_classes
         self._prediction = prediction

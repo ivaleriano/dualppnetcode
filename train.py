@@ -39,8 +39,7 @@ def create_parser():
     parser.add_argument(
         "--shape",
         default="pointcloud",
-        help="which shape representation to use "
-        "(pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
+        help="which shape representation to use (pointcloud,mesh,mask,vol_with_bg,vol_without_bg)",
     )
     parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
     parser.add_argument(
@@ -168,7 +167,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         return loss
 
     def get_metrics(self) -> Sequence[Metric]:
-        """Returna a list of metrics to compute."""
+        """Returns a list of metrics to compute."""
         metrics = [Mean("cross_entropy"), Accuracy("logits", "target")]
         return metrics
 
@@ -183,7 +182,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         """Returns a model instance."""
 
     @abstractmethod
-    def get_data(self) -> Tuple[DataLoader, DataLoader,DataLoader]:
+    def get_data(self) -> Tuple[DataLoader, DataLoader, DataLoader]:
         """Returns a data loader instance for training and evaluation, respectively."""
 
 
@@ -200,10 +199,9 @@ class ImageModelFactory(BaseModelFactory):
         eval_data = adni_hdf.get_image_dataset_for_eval(args.val_data, transform_kwargs, args.shape)
         valDataLoader = NamedDataLoader(eval_data, output_names=["image", "target"], batch_size=args.batchsize)
 
-
         test_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
         testDataLoader = NamedDataLoader(test_data, output_names=["image", "target"], batch_size=args.batchsize)
-        return trainDataLoader, valDataLoader,testDataLoader
+        return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
         args = self.args
@@ -232,7 +230,7 @@ class PointCloudModelFactory(BaseModelFactory):
         test_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
         testDataLoader = NamedDataLoader(test_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
 
-        return trainDataLoader, valDataLoader , testDataLoader
+        return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
         args = self.args
@@ -306,7 +304,7 @@ def main(args=None):
 
     factory.write_args(experiment_dir / "experiment_args.json")
 
-    trainDataLoader, valDataLoader,testDataLoader = factory.get_data()
+    trainDataLoader, valDataLoader, testDataLoader = factory.get_data()
     discriminator = factory.get_and_init_model()
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
@@ -322,10 +320,11 @@ def main(args=None):
         eval_metrics_tb = factory.get_metrics()
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics_tb)]
     eval_metrics_cp = factory.get_metrics()
-    eval_hooks.append(CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5,metrics=eval_metrics_cp,save_best=True))
-
-
-
+    eval_hooks.append(
+        CheckpointSaver(
+            discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics_cp, save_best=True
+        )
+    )
 
     train_and_evaluate(
         model=discriminator,
@@ -339,11 +338,6 @@ def main(args=None):
         eval_hooks=eval_hooks,
         device=torch.device("cuda"),
     )
-
-    param_dict = args.__dict__
-    param_dict["num_parameters"] = get_number_of_parameters(discriminator)
-
-
 
 
 if __name__ == "__main__":
