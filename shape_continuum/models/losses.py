@@ -1,78 +1,97 @@
+from typing import Optional
+
 import torch
+from torch import nn
 
-__all__ = ["coxph_loss"]
+__all__ = ["CoxphLoss"]
 
 
-def safe_normalize(x):
+def safe_normalize(x: torch.Tensor) -> torch.Tensor:
     """Normalize risk scores to avoid exp underflowing.
+
     Note that only risk scores relative to each other matter.
     If minimum risk score is negative, we shift scores so minimum
     is at zero.
     """
     x_min, _ = torch.min(x, dim=0)
-    c = torch.zeros(x_min.shape)
-    if torch.cuda.is_available():
-        c = c.cuda()
+    c = torch.zeros(x_min.shape, device=x.device)
     norm = torch.where(x_min < 0, -x_min, c)
     return x + norm
 
 
-def coxph_loss(event, riskset, predictions):
-    """Negative partial log-likelihood of Cox's proportional
-    hazards model.
-    Parameters
-    ----------
-    event : torch.Tensor
-        Binary vector where 1 indicates an event 0 censoring.
-    riskset : torch.Tensor
-        Boolean matrix where the `i`-th row denotes the
-        risk set of the `i`-th instance, i.e. the indices `j`
-        for which the observer time `y_j >= y_i`.
-    predictions : torch.Tensor
-        The predicted outputs. Must be a rank 2 tensor.
-    Returns
-    -------
-    loss : torch.Tensor
-        Scalar loss.
-    References
-    ----------
-    .. [1] Faraggi, D., & Simon, R. (1995).
-    A neural network model for survival data. Statistics in Medicine,
-    14(1), 73–82. https://doi.org/10.1002/sim.4780140108
-    """
-    if predictions is None:
-        raise ValueError("predictions must not be None.")
-    if predictions.dim() != 2:
-        raise ValueError("predictions must be a 2D tensor.")
-    if predictions.shape[1] != 1:
-        raise ValueError("last dimension of predictions ({}) must be 1.".format(predictions.shape[1]))
-    if event is None:
-        raise ValueError("event must not be None.")
-    if predictions.dim() != event.dim():
-        raise ValueError(
-            "Rank of predictions ({}) must equal rank of event ({})".format(predictions.dim(), event.dim())
-        )
-    if event.shape[1] != 1:
-        raise ValueError("last dimension event ({}) must be 1.".format(event.shape[1]))
-    if riskset is None:
-        raise ValueError("riskset must not be None.")
+def logsumexp_masked(
+    risk_scores: torch.Tensor, mask: torch.Tensor, dim: int = 0, keepdim: Optional[bool] = None
+) -> torch.Tensor:
+    """Compute logsumexp across `dim` for entries where `mask` is true."""
+    assert risk_scores.dim() == mask.dim(), "risk_scores and mask must have same rank"
 
-    event = event.type(predictions.type())
-    riskset = riskset.type(predictions.type())
-    predictions = safe_normalize(predictions)
+    mask_f = mask.type_as(risk_scores)
+    risk_scores_masked = risk_scores * mask_f
+    # for numerical stability, substract the maximum value
+    # before taking the exponential
+    amax, _ = torch.max(risk_scores_masked, dim=dim, keepdim=True)
+    risk_scores_shift = risk_scores_masked - amax
 
-    pred_t = torch.transpose(predictions, 0, 1)
+    exp_masked = risk_scores_shift.exp() * mask_f
+    exp_sum = exp_masked.sum(dim, keepdim=True)
+    output = exp_sum.log() + amax
+    if not keepdim:
+        output.squeeze_(dim=dim)
+    return output
 
-    pred_masked = pred_t * riskset
-    amax, _ = torch.max(pred_masked, dim=1, keepdim=True)
-    pred_shifted = pred_masked - amax
 
-    exp_masked = torch.exp(pred_shifted) * riskset
-    exp_sum = torch.sum(exp_masked, dim=1, keepdim=True)
+class CoxphLoss(nn.Module):
+    def forward(self, predictions: torch.Tensor, event: torch.Tensor, riskset: torch.Tensor) -> torch.Tensor:
+        """Negative partial log-likelihood of Cox's proportional
+        hazards model.
 
-    rr = amax + torch.log(exp_sum)
-    losses = event * (rr - predictions)
+        Args:
+            predictions (torch.Tensor):
+                The predicted outputs. Must be a rank 2 tensor.
+            event (torch.Tensor):
+                Binary vector where 1 indicates an event 0 censoring.
+            riskset (torch.Tensor):
+                Boolean matrix where the `i`-th row denotes the
+                risk set of the `i`-th instance, i.e. the indices `j`
+                for which the observer time `y_j >= y_i`.
 
-    loss = torch.mean(losses)
+        Returns:
+            loss (torch.Tensor):
+                Scalar loss.
 
-    return loss
+        References:
+            .. [1] Faraggi, D., & Simon, R. (1995).
+            A neural network model for survival data. Statistics in Medicine,
+            14(1), 73–82. https://doi.org/10.1002/sim.4780140108
+        """
+        if predictions is None or predictions.dim() != 2:
+            raise ValueError("predictions must be a 2D tensor.")
+        if predictions.size()[1] != 1:
+            raise ValueError("last dimension of predictions ({}) must be 1.".format(predictions.size()[1]))
+        if event is None:
+            raise ValueError("event must not be None.")
+        if predictions.dim() != event.dim():
+            raise ValueError(
+                "Rank of predictions ({}) must equal rank of event ({})".format(predictions.dim(), event.dim())
+            )
+        if event.size()[1] != 1:
+            raise ValueError("last dimension event ({}) must be 1.".format(event.size()[1]))
+        if riskset is None:
+            raise ValueError("riskset must not be None.")
+
+        event = event.type_as(predictions)
+        riskset = riskset.type_as(predictions)
+        predictions = safe_normalize(predictions)
+
+        # move batch dimension to the end so predictions get broadcast
+        # row-wise when multiplying by riskset
+        pred_t = predictions.t()
+
+        # compute log of sum over risk set for each row
+        rr = logsumexp_masked(pred_t, riskset, dim=1, keepdim=True)
+        assert rr.size() == predictions.size()
+
+        losses = event * (rr - predictions)
+        loss = torch.mean(losses)
+
+        return loss

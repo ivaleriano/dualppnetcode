@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict
 
 import numpy as np
+from sksurv.metrics import concordance_index_censored
 from torch import Tensor
 
 
@@ -134,3 +135,58 @@ class BalancedAccuracy(Metric):
         for i, c in zip(classes, counts):
             self._total[i] += c
             self._correct[i] += is_correct[target_tensor == i].sum()
+
+
+class ConcordanceIndex(Metric):
+    """Computes concordance index across one epoch."""
+
+    METRIC_NAMES = ("cindex", "concordant", "discordant", "tied_risk")
+
+    def __init__(self, prediction: str, target_event: str, target_time: str) -> None:
+        self._prediction = prediction
+        self._target_event = target_event
+        self._target_time = target_time
+
+    def reset(self) -> None:
+        """Clear the buffer of collected values."""
+        self._data = {"target_time": [], "target_event": [], "prediction": []}
+
+    def is_best(self) -> bool:
+        return False
+
+    def _append_time(self, inputs: Dict[str, Tensor]) -> None:
+        arr = inputs[self._target_time].detach().cpu().numpy()
+        self._data["target_time"].append(arr)
+
+    def _append_event(self, inputs: Dict[str, Tensor]) -> None:
+        arr = inputs[self._target_event].squeeze(1).detach().cpu().numpy()
+        self._data["target_event"].append(arr)
+
+    def _append_prediction(self, outputs: Dict[str, Tensor]) -> None:
+        arr = outputs[self._prediction].squeeze(1).detach().cpu().numpy()
+        self._data["prediction"].append(arr)
+
+    def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
+        """Collect observed time, event indicator and predictions for a batch."""
+        self._append_event(inputs)
+        self._append_time(inputs)
+        self._append_prediction(outputs)
+
+    def values(self) -> Dict[str, float]:
+        """Computes the concordance index across collected values.
+
+        Returns:
+            metrics (dict):
+                Computed metrics.
+        """
+        data = {}
+        for k, v in self._data.items():
+            data[k] = np.concatenate(v)
+
+        results = concordance_index_censored(data["target_event"] == 1, data["target_time"], data["prediction"])
+
+        result_data = {}
+        for k, v in zip(ConcordanceIndex.METRIC_NAMES, results):
+            result_data[f"concordance/{k}"] = v
+
+        return result_data
