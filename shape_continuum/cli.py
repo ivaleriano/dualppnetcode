@@ -7,12 +7,14 @@ from typing import Sequence, Tuple
 
 import torch
 from torch.optim.optimizer import Optimizer
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from .data_utils import adni_hdf, mesh_utils
+from .data_utils.surv_data import cox_collate_fn
 from .models.base import BaseModel
+from .models.losses import CoxphLoss
 from .networks import mesh_networks, point_networks, vol_networks
-from .training.metrics import Accuracy, Mean, Metric
+from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric
 from .training.wrappers import LossWrapper, MeshNamedDataLoader, NamedDataLoader
 
 
@@ -69,6 +71,14 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def __init__(self, arguments: argparse.Namespace) -> None:
         self.args = arguments
+
+        if arguments.task == "clf":
+            self._task = adni_hdf.Task.CLASSIFICATION
+        elif arguments.task == "surv":
+            assert arguments.num_classes == 1
+            self._task = adni_hdf.Task.SURVIVAL_ANALYSIS
+        else:
+            raise ValueError("task={!r} is not supported".format(arguments.task))
 
     def make_directories(self) -> Tuple[str, str, str]:
         """"Create directories to hold logs and checkpoints.
@@ -158,14 +168,22 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def get_loss(self) -> LossWrapper:
         """Return the loss to optimize."""
-        loss = LossWrapper(
-            torch.nn.CrossEntropyLoss(), input_names=["logits", "target"], output_names=["cross_entropy"]
-        )
+        if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
+            loss = LossWrapper(
+                CoxphLoss(), input_names=["logits", "event", "riskset"], output_names=["partial_log_lik"]
+            )
+        else:
+            loss = LossWrapper(
+                torch.nn.CrossEntropyLoss(), input_names=["logits", "target"], output_names=["cross_entropy"]
+            )
         return loss
 
     def get_metrics(self) -> Sequence[Metric]:
         """Returns a list of metrics to compute."""
-        metrics = [Mean("cross_entropy"), Accuracy("logits", "target")]
+        if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
+            metrics = [Mean("partial_log_lik"), ConcordanceIndex("logits", "event", "time")]
+        else:
+            metrics = [Mean("cross_entropy"), Accuracy("logits", "target")]
         return metrics
 
     def get_and_init_model(self) -> BaseModel:
@@ -174,13 +192,53 @@ class BaseModelFactory(metaclass=ABCMeta):
         self._init_model(model)
         return model
 
+    @property
+    def data_loader_target_names(self):
+        if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
+            target_names = ["event", "time", "riskset"]
+        else:
+            target_names = ["target"]
+        return target_names
+
+    def _make_named_data_loader(
+        self, dataset: Dataset, model_data_names: Sequence[str], is_training: bool = False
+    ) -> NamedDataLoader:
+        """Create a NamedDataLoader for the given dataset.
+
+        Args:
+          dataset (Dataset):
+            The dataset to wrap.
+          model_data_names (list of str):
+            Should correspond to the names of the first `len(model_data_names)` outputs
+            of the dataset and that are fed to model in a forward pass. The names
+            of the targets used to compute the loss will be retrieved from :meth:`data_loader_target_names`.
+          is_training (bool):
+            Whether to enable training mode or not.
+        """
+        batch_size = self.args.batchsize
+        if len(dataset) < batch_size:
+            if is_training:
+                raise RuntimeError(
+                    "batch size ({:d}) cannot exceed dataset size ({:d})".format(batch_size, len(dataset))
+                )
+            else:
+                batch_size = len(dataset)
+
+        kwargs = {"batch_size": batch_size, "shuffle": is_training, "drop_last": is_training}
+        if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
+            kwargs["collate_fn"] = cox_collate_fn
+
+        output_names = list(model_data_names) + self.data_loader_target_names
+        loader = NamedDataLoader(dataset, output_names=output_names, **kwargs)
+        return loader
+
     @abstractmethod
     def get_model(self) -> BaseModel:
         """Returns a model instance."""
 
     @abstractmethod
     def get_data(self) -> Tuple[DataLoader, DataLoader, DataLoader]:
-        """Returns a data loader instance for training and evaluation, respectively."""
+        """Returns a data loader instance for training, evaluation, and testing, respectively."""
 
 
 class ImageModelFactory(BaseModelFactory):
@@ -188,16 +246,16 @@ class ImageModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(args.train_data, args.shape, rescale=True)
-        trainDataLoader = NamedDataLoader(
-            train_data, output_names=["image", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
+        train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(
+            args.train_data, self._task, args.shape, rescale=True
         )
+        trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)
 
-        eval_data = adni_hdf.get_image_dataset_for_eval(args.val_data, transform_kwargs, args.shape)
-        valDataLoader = NamedDataLoader(eval_data, output_names=["image", "target"], batch_size=args.batchsize)
+        eval_data = adni_hdf.get_image_dataset_for_eval(args.val_data, self._task, transform_kwargs, args.shape)
+        valDataLoader = self._make_named_data_loader(eval_data, ["image"])
 
-        test_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
-        testDataLoader = NamedDataLoader(test_data, output_names=["image", "target"], batch_size=args.batchsize)
+        test_data = adni_hdf.get_image_dataset_for_eval(args.test_data, self._task, transform_kwargs, args.shape)
+        testDataLoader = self._make_named_data_loader(test_data, ["image"])
         return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
@@ -216,16 +274,14 @@ class PointCloudModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        train_data, transform_kwargs = adni_hdf.get_point_cloud_dataset_for_train(args.train_data)
-        trainDataLoader = NamedDataLoader(
-            train_data, output_names=["pointcloud", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
-        )
+        train_data, transform_kwargs = adni_hdf.get_point_cloud_dataset_for_train(args.train_data, self._task)
+        trainDataLoader = self._make_named_data_loader(train_data, ["pointcloud"], is_training=True)
 
-        eval_data = adni_hdf.get_point_cloud_dataset_for_eval(args.val_data, transform_kwargs)
-        valDataLoader = NamedDataLoader(eval_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
+        eval_data = adni_hdf.get_point_cloud_dataset_for_eval(args.val_data, self._task, transform_kwargs)
+        valDataLoader = self._make_named_data_loader(eval_data, ["pointcloud"])
 
-        test_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
-        testDataLoader = NamedDataLoader(test_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
+        test_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, self._task, transform_kwargs)
+        testDataLoader = self._make_named_data_loader(test_data, ["pointcloud"])
 
         return trainDataLoader, valDataLoader, testDataLoader
 
