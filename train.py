@@ -13,15 +13,16 @@ from shape_continuum.data_utils import adni_hdf, mesh_utils
 from shape_continuum.models.base import BaseModel
 from shape_continuum.networks import mesh_networks, point_networks, vol_networks
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
-from shape_continuum.training.metrics import Accuracy, Mean, Metric
+from shape_continuum.training.metrics import Accuracy, Mean, Metric,BalancedAccuracy
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
 from shape_continuum.training.wrappers import LossWrapper, MeshNamedDataLoader, NamedDataLoader
 
 
+
 def create_parser():
     parser = argparse.ArgumentParser("PointNet")
-    parser.add_argument("--batchsize", type=int, default=20, help="input batch size")
+    parser.add_argument("--batchsize", type=int, default=64, help="input batch size")
     parser.add_argument("--workers", type=int, default=4, help="number of data loading workers")
     parser.add_argument("--epoch", type=int, default=200, help="number of epochs for training")
     parser.add_argument("--num_points", type=int, default=1500, help="number of epochs for training")
@@ -39,9 +40,10 @@ def create_parser():
     parser.add_argument(
         "--shape",
         default="pointcloud",
-        help="which shape representation to use (pointcloud,mesh,mask,vol_with_bg,vol_without_bg)",
+        help="which shape representation to use "
+        "(pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
     )
-    parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
+    parser.add_argument("--num_classes", type=int, default=2, help="number of classes")
     parser.add_argument(
         "--experiment_name",
         action="store_true",
@@ -166,9 +168,9 @@ class BaseModelFactory(metaclass=ABCMeta):
         )
         return loss
 
-    def get_metrics(self) -> Sequence[Metric]:
-        """Returns a list of metrics to compute."""
-        metrics = [Mean("cross_entropy"), Accuracy("logits", "target")]
+    def get_metrics(self,num_classes:int=3) -> Sequence[Metric]:
+        """Returna a list of metrics to compute."""
+        metrics = [Mean("cross_entropy"), Accuracy("logits", "target"),BalancedAccuracy(num_classes,"logits","target")]
         return metrics
 
     def get_and_init_model(self) -> BaseModel:
@@ -182,7 +184,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         """Returns a model instance."""
 
     @abstractmethod
-    def get_data(self) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    def get_data(self) -> Tuple[DataLoader, DataLoader,DataLoader]:
         """Returns a data loader instance for training and evaluation, respectively."""
 
 
@@ -199,9 +201,10 @@ class ImageModelFactory(BaseModelFactory):
         eval_data = adni_hdf.get_image_dataset_for_eval(args.val_data, transform_kwargs, args.shape)
         valDataLoader = NamedDataLoader(eval_data, output_names=["image", "target"], batch_size=args.batchsize)
 
+
         test_data = adni_hdf.get_image_dataset_for_eval(args.test_data, transform_kwargs, args.shape)
         testDataLoader = NamedDataLoader(test_data, output_names=["image", "target"], batch_size=args.batchsize)
-        return trainDataLoader, valDataLoader, testDataLoader
+        return trainDataLoader, valDataLoader,testDataLoader
 
     def get_model(self):
         args = self.args
@@ -230,7 +233,7 @@ class PointCloudModelFactory(BaseModelFactory):
         test_data = adni_hdf.get_point_cloud_dataset_for_eval(args.test_data, transform_kwargs)
         testDataLoader = NamedDataLoader(test_data, output_names=["pointcloud", "target"], batch_size=args.batchsize)
 
-        return trainDataLoader, valDataLoader, testDataLoader
+        return trainDataLoader, valDataLoader , testDataLoader
 
     def get_model(self):
         args = self.args
@@ -250,10 +253,13 @@ class MeshModelFactory(BaseModelFactory):
         trainDataLoader = MeshNamedDataLoader(
             train_data, output_names=["mesh", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
         )
-        eval_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
+        eval_data = adni_hdf.get_mesh_dataset_for_eval(args.val_data, transform_kwargs)
         valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"], batch_size=args.batchsize)
+
+        test_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
+        testDataLoader = MeshNamedDataLoader(test_data, output_names=["mesh", "target"], batch_size=args.batchsize)
         self.template = template
-        return trainDataLoader, valDataLoader
+        return trainDataLoader, valDataLoader,testDataLoader
 
     def get_model(self):
         args = self.args
@@ -304,11 +310,11 @@ def main(args=None):
 
     factory.write_args(experiment_dir / "experiment_args.json")
 
-    trainDataLoader, valDataLoader, testDataLoader = factory.get_data()
+    trainDataLoader, valDataLoader,testDataLoader = factory.get_data()
     discriminator = factory.get_and_init_model()
     optimizerD = factory.get_optimizer(discriminator.parameters())
     loss = factory.get_loss()
-    train_metrics = factory.get_metrics()
+    train_metrics = factory.get_metrics(args.num_classes)
     train_hooks = []  # [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
     eval_hooks = []
 
@@ -317,9 +323,9 @@ def main(args=None):
             comment = input("comment to add to TB visualization: ")
             tb_log_dir /= comment
         train_hooks.append(TensorBoardLogger(str(tb_log_dir / "train"), train_metrics))
-        eval_metrics_tb = factory.get_metrics()
+        eval_metrics_tb = factory.get_metrics(args.num_classes)
         eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics_tb)]
-    eval_metrics_cp = factory.get_metrics()
+    eval_metrics_cp = factory.get_metrics(args.num_classes)
     eval_hooks.append(
         CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics_cp)
     )
