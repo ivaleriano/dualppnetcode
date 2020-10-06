@@ -10,7 +10,8 @@ DATA_DIR="/mnt/nas/Data_Neuro/ADNI3/fs-splits-matched"
 # --discriminator_net can be one of "resnet", "convnet"
 python train.py \
     --train_data "${DATA_DIR}/train.h5" \
-    --test_data "${DATA_DIR}/valid.h5" \
+    --val_data "${DATA_DIR}/valid.h5" \
+    --test_data "${DATA_DIR}/test.h5" \
     --discriminator_net "resnet" \
     --shape "vol_with_bg" \
     --task "clf" \
@@ -23,7 +24,8 @@ python train.py \
 # --discriminator_net can be one of "pointnet", "pointnet++"
 python train.py \
     --train_data "${DATA_DIR}/train.h5" \
-    --test_data "${DATA_DIR}/valid.h5" \
+    --val_data "${DATA_DIR}/valid.h5" \
+    --test_data "${DATA_DIR}/test.h5" \
     --discriminator_net "pointnet" \
     --shape "pointcloud" \
     --task "clf" \
