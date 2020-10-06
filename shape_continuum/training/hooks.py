@@ -1,6 +1,7 @@
 import numbers
 from pathlib import Path
 from typing import Dict, Optional, Sequence
+from urllib.parse import quote
 
 import torch
 from torch import Tensor
@@ -44,10 +45,8 @@ class CheckpointSaver(Hook):
         The model which state should be saved.
       checkpoint_dir (str):
         Base directory for the checkpoint files.
-      metrics (list of Metric):
-        Instances of metrics to compute. Used for keeping track of best performing model
-      save_best(boolean):
-        True if you want to save the best performing model for each metric
+      metrics (list of Metric|None):
+        Instances of metrics to compute. Used for keeping track of best performing model.
       save_every_n_epochs (int):
         Optional; Save every N steps.
       max_keep (int):
@@ -55,8 +54,13 @@ class CheckpointSaver(Hook):
     """
 
     def __init__(
-        self, model: Module, checkpoint_dir: str, save_every_n_epochs: int = 1, max_keep: Optional[int] = None,
-        metrics: Sequence[Metric] = None,save_best: bool=False) -> None:
+        self,
+        model: Module,
+        checkpoint_dir: str,
+        save_every_n_epochs: int = 1,
+        max_keep: Optional[int] = None,
+        metrics: Optional[Sequence[Metric]] = None,
+    ) -> None:
         self._model = model
         self._checkpoint_dir = Path(checkpoint_dir)
         self._save_every_n_epochs = save_every_n_epochs
@@ -64,8 +68,7 @@ class CheckpointSaver(Hook):
         self._epoch = 0
         self._ckpkt_remove = []
         self._metrics = metrics
-        self._save_best = save_best
-
+        self._max_metrics = {}
 
     def _forward(self, fn_name, *args):
         for m in self._metrics:
@@ -76,14 +79,12 @@ class CheckpointSaver(Hook):
         self._inputs = inputs
 
     def after_step(self, outputs: Dict[str, Tensor]) -> None:
-        if self._save_best and self._checkpoint_dir :
+        if self._metrics is not None:
             self._forward("update", self._inputs, outputs)
 
-
     def on_begin_epoch(self) -> None:
-        if self._save_best and self._checkpoint_dir:
+        if self._metrics is not None:
             self._forward("reset")
-
 
     def on_end_epoch(self) -> None:
         self._epoch += 1
@@ -92,10 +93,8 @@ class CheckpointSaver(Hook):
             if self._max_keep is not None:
                 self._remove()
                 self._ckpkt_remove.append(ckpt_path)
-        if self._save_best and self._checkpoint_dir:
+        if self._metrics is not None:
             self._save_best_models()
-
-
 
     def _save(self):
         path = self._checkpoint_dir / "discriminator_{:04d}.pth".format(self._epoch)
@@ -107,9 +106,13 @@ class CheckpointSaver(Hook):
 
     def _save_best_models(self):
         for m in self._metrics:
-            if m.is_best():
-                for name in m.values().keys():
-                    path = self._checkpoint_dir / "best_discriminator_{:}.pth".format(name)
+            stats = m.values()
+            for name, value in stats.items():
+                previous = self._max_metrics.get(name, float("-inf"))
+                if value > previous:
+                    self._max_metrics[name] = value
+                    safe_name = quote(name, safe="")  # remove slashes and other bad stuff
+                    path = self._checkpoint_dir / "best_discriminator_{}.pth".format(safe_name)
                     torch.save(
                         self._model.state_dict(), path,
                     )
@@ -135,8 +138,6 @@ class TensorBoardLogger(Hook):
         self._metrics = metrics
         self._epoch = 0
 
-
-
     def _forward(self, fn_name, *args):
         for m in self._metrics:
             fn = getattr(m, fn_name)
@@ -154,8 +155,6 @@ class TensorBoardLogger(Hook):
 
     def after_step(self, outputs: Dict[str, Tensor]) -> None:
         self._forward("update", self._inputs, outputs)
-
-
 
     def _write_all(self):
         for m in self._metrics:
