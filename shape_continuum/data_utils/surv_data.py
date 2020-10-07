@@ -1,7 +1,8 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import torch
+from torch.utils.data.dataloader import default_collate
 
 
 def make_riskset(time: np.ndarray) -> np.ndarray:
@@ -34,15 +35,17 @@ def make_riskset(time: np.ndarray) -> np.ndarray:
     return risk_set
 
 
-def cox_collate_fn(batch: List[np.ndarray], time_index: Optional[int] = -1) -> List[torch.Tensor]:
+def cox_collate_fn(
+    batch: List[Any], time_index: Optional[int] = -1, data_collate=default_collate
+) -> List[torch.Tensor]:
     """Create risk set from batch."""
     transposed_data = list(zip(*batch))
     y_time = np.array(transposed_data[time_index])
 
     data = []
-    for j, b in enumerate(transposed_data):
-        bt = [torch.as_tensor(v) for v in b]
-        data.append(torch.stack(bt, 0))
+    for b in transposed_data:
+        bt = data_collate(b)
+        data.append(bt)
 
     data.append(torch.from_numpy(make_riskset(y_time)))
 

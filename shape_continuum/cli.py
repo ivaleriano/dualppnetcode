@@ -2,6 +2,7 @@ import argparse
 import json
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Sequence, Tuple
 
@@ -15,7 +16,7 @@ from .models.base import BaseModel
 from .models.losses import CoxphLoss
 from .networks import mesh_networks, point_networks, vol_networks
 from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric
-from .training.wrappers import LossWrapper, MeshNamedDataLoader, NamedDataLoader
+from .training.wrappers import LossWrapper, NamedDataLoader, mesh_collate
 
 
 def create_parser():
@@ -224,9 +225,11 @@ class BaseModelFactory(metaclass=ABCMeta):
             else:
                 batch_size = len(dataset)
 
-        kwargs = {"batch_size": batch_size, "shuffle": is_training, "drop_last": is_training}
+        collate_fn = mesh_collate
         if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
-            kwargs["collate_fn"] = cox_collate_fn
+            collate_fn = partial(cox_collate_fn, data_collate=collate_fn)
+
+        kwargs = {"batch_size": batch_size, "collate_fn": collate_fn, "shuffle": is_training, "drop_last": is_training}
 
         output_names = list(model_data_names) + self.data_loader_target_names
         loader = NamedDataLoader(dataset, output_names=output_names, **kwargs)
@@ -299,14 +302,17 @@ class PointCloudModelFactory(BaseModelFactory):
 class MeshModelFactory(BaseModelFactory):
     def get_data(self):
         args = self.args
-        train_data, transform_kwargs, template = adni_hdf.get_mesh_dataset_for_train(args.train_data)
-        trainDataLoader = MeshNamedDataLoader(
-            train_data, output_names=["mesh", "target"], batch_size=args.batchsize, shuffle=True, drop_last=True,
-        )
-        eval_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, transform_kwargs)
-        valDataLoader = MeshNamedDataLoader(eval_data, output_names=["mesh", "target"], batch_size=args.batchsize)
+        train_data, transform_kwargs, template = adni_hdf.get_mesh_dataset_for_train(args.train_data, self._task)
+        trainDataLoader = self._make_named_data_loader(train_data, ["mesh"], is_training=True)
+
+        eval_data = adni_hdf.get_mesh_dataset_for_eval(args.val_data, self._task, transform_kwargs)
+        valDataLoader = self._make_named_data_loader(eval_data, ["mesh"])
+
+        test_data = adni_hdf.get_mesh_dataset_for_eval(args.test_data, self._task, transform_kwargs)
+        testDataLoader = self._make_named_data_loader(test_data, ["mesh"])
+
         self.template = template
-        return trainDataLoader, valDataLoader
+        return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
         args = self.args
