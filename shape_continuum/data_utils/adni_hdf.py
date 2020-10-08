@@ -1,4 +1,5 @@
-from typing import Callable, Optional, Tuple
+import enum
+from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -16,11 +17,36 @@ DIAGNOSIS_CODES = {
     "MCI": np.array(1, dtype=np.int64),
     "Dementia": np.array(2, dtype=np.int64),
 }
+PROGRESSION_STATUS = {
+    "no": np.array([0], dtype=np.uint8),
+    "yes": np.array([1], dtype=np.uint8),
+}
+
+DataTransformFn = Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]
+TargetTransformFn = Callable[[str], np.ndarray]
 
 AddChannelDim = transforms.Lambda(lambda x: x[np.newaxis])
-LabelsToIndex = transforms.Lambda(lambda x: DIAGNOSIS_CODES[x])
 NumpyToTensor = transforms.Lambda(torch.from_numpy)
 AsTensor = transforms.Lambda(torch.as_tensor)
+
+
+class Task(enum.Enum):
+    CLASSIFICATION = (["DX"], DIAGNOSIS_CODES)
+    SURVIVAL_ANALYSIS = (["event", "time"], PROGRESSION_STATUS)
+
+    def __init__(self, target_labels: Sequence[str], target2code: Dict[str, np.ndarray]):
+        self._target_labels = target_labels
+        self._target2code = target2code
+
+    @property
+    def labels(self) -> Sequence[str]:
+        """The names of attributes storing labels."""
+        return self._target_labels
+
+    @property
+    def label_transform(self) -> TargetTransformFn:
+        """The transform function to convert labels to numbers."""
+        return transforms.Lambda(lambda x: self._target2code[x])
 
 
 class HDF5Dataset(Dataset):
@@ -41,58 +67,80 @@ class HDF5Dataset(Dataset):
         Path to HDF5 file.
       dataset_name (str):
         Name of the dataset to load (e.g. 'pointcloud', 'mask', 'vol_with_bg').
+      target_labels (list of str):
+        The names of attributes to retrieve as labels.
       transform (callable):
         Optional; A function that takes an individual data point
         (e.g. images, point clouds) and returns transformed version.
-      target_transform (callable):
-        Optional; A function that takes in a diagnosis (DX) label and
-        transforms it.
+      target_transform (dict mapping str to callable):
+        Optional; The key should be the name of a label attribute passed as `target_labels`,
+        the value a function that takes in a label and transforms it.
     """
 
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None):
+    def __init__(
+        self,
+        filename: str,
+        dataset_name: str,
+        target_labels: Sequence[str],
+        transform: Optional[DataTransformFn] = None,
+        target_transform: Optional[Dict[str, TargetTransformFn]] = None,
+    ) -> None:
+        self.target_labels = target_labels
         self.transform = transform
         self.target_transform = target_transform
         self._load(filename, dataset_name)
 
     def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
         data = []
-        targets = []
+        targets = {k: [] for k in self.target_labels}
         visits = []
-        meta = {}
         with h5py.File(filename, "r") as hf:
             for image_uid, g in hf.items():
                 if image_uid == "stats":
                     continue
                 visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
 
-                targets.append(g.attrs["DX"])
-                img = g[roi][dataset_name][:]
-                data.append(img)
+                for label in self.target_labels:
+                    targets[label].append(g.attrs[label])
 
-            for key, value in hf["stats"][roi][dataset_name].items():
-                if len(value.shape) > 0:
-                    meta[key] = value[:]
-                else:
-                    meta[key] = np.array(value, dtype=value.dtype)
+                data.append(self._get_data(g[roi][dataset_name]))
+
+            meta = self._get_meta_data(hf["stats"][roi][dataset_name])
 
         self.data = data
         self.targets = targets
         self.visits = visits
         self.meta = meta
 
+    def _get_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
+        img = data[:]
+        return img
+
+    def _get_meta_data(self, stats: h5py.Group) -> Dict[str, Any]:
+        meta = {}
+        for key, value in stats.items():
+            if len(value.shape) > 0:
+                meta[key] = value[:]
+            else:
+                meta[key] = np.array(value, dtype=value.dtype)
+        return meta
+
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, index: int) -> Tuple[np.ndarray, np.ndarray]:
-        img, target = self.data[index], self.targets[index]
-
+    def __getitem__(self, index: int) -> Sequence[np.ndarray]:
+        img = self.data[index]
         if self.transform is not None:
             img = self.transform(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        data_point = [img]
+        for label in self.target_labels:
+            target = self.targets[label][index]
+            if self.target_transform is not None:
+                target = self.target_transform[label](target)
+            data_point.append(target)
 
-        return img, target
+        return tuple(data_point)
 
 
 class HDF5DatasetMesh(HDF5Dataset):
@@ -106,6 +154,8 @@ class HDF5DatasetMesh(HDF5Dataset):
         Path to HDF5 file.
       dataset_name (str):
         Name of the dataset to load (e.g. 'pointcloud', 'mask', 'vol_with_bg').
+      target_labels (list of str):
+        The names of attributes to retrieve as labels.
       transform (callable):
         Optional; A function that takes an individual data point
         (e.g. images, point clouds) and returns transformed version.
@@ -115,53 +165,42 @@ class HDF5DatasetMesh(HDF5Dataset):
       ds_factor (list[int]): down sampling factor in each pooling layer.
     """
 
-    def __init__(self, filename, dataset_name, transform=None, target_transform=None, ds_factors=[4, 4]):
+    def __init__(self, filename, dataset_name, target_labels, transform=None, target_transform=None, ds_factors=[4, 4]):
         self.ds_factors = ds_factors
         super().__init__(
-            filename=filename, dataset_name=dataset_name, transform=transform, target_transform=target_transform
+            filename=filename,
+            dataset_name=dataset_name,
+            target_labels=target_labels,
+            transform=transform,
+            target_transform=target_transform,
         )
 
-    def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
-        data = []
-        targets = []
-        visits = []
+    def _get_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
+        face = torch.from_numpy(data["faces"][:]).type(torch.long)
+        face = face.T
+        x = torch.tensor(data["vertices"][:].astype(np.float32))
+
+        edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
+        edge_index = to_undirected(edge_index)
+
+        img = Data(x=x, edge_index=edge_index, face=face)
+        return img
+
+    def _get_meta_data(self, stats: h5py.Group) -> Dict[str, Any]:
         meta = {}
-        with h5py.File(filename, "r") as hf:
-            # reading template from the hdf5
-            mesh = Mesh(
-                v=hf["stats"][roi][dataset_name]["template"]["vertices"][:],
-                f=hf["stats"][roi][dataset_name]["template"]["faces"][:],
-            )
-            _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
-            self.template = {"vertices": V, "face": F, "adj": A, "down_transform": D, "up_transform": U}
+        for key, value in stats.items():
+            if key.startswith("max_dist"):
+                if len(value.shape) > 0:
+                    meta[key] = value[:]
+                else:
+                    meta[key] = np.array(value, dtype=value.dtype)
 
-            for image_uid, g in hf.items():
-                if image_uid == "stats":
-                    continue
-                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+        # reading template from the hdf5
+        mesh = Mesh(v=stats["template"]["vertices"][:], f=stats["template"]["faces"][:])
+        _, A, D, U, F, V = mesh_sampling.generate_transform_matrices(mesh, self.ds_factors)
+        self.template = {"vertices": V, "face": F, "adj": A, "down_transform": D, "up_transform": U}
 
-                targets.append(g.attrs["DX"])
-
-                face = torch.from_numpy(g[roi][dataset_name]["faces"][:]).type(torch.long)
-                face = face.T
-                x = torch.tensor(g[roi][dataset_name]["vertices"][:].astype(np.float32))
-
-                edge_index = torch.cat([face[:2], face[1:], face[::2]], dim=1)
-                edge_index = to_undirected(edge_index)
-                y = g.attrs["DX"]
-                y = self.target_transform(y)
-                img = Data(x=x, y=y, edge_index=edge_index, face=face)
-                data.append(img)
-            for key, value in hf["stats"][roi][dataset_name].items():
-                if key.startswith("max_dist"):
-                    if len(value.shape) > 0:
-                        meta[key] = value[:]
-                    else:
-                        meta[key] = np.array(value, dtype=value.dtype)
-        self.data = data
-        self.targets = targets
-        self.visits = visits
-        self.meta = meta
+        return meta
 
 
 def _get_image_dataset_transform(
@@ -189,7 +228,19 @@ def _get_image_dataset_transform(
     return transforms.Compose(img_transforms)
 
 
-def get_image_dataset_for_train(filename, dataset_name, rescale=False, standardize=False):
+def _get_target_transform(task: Task) -> TargetTransformFn:
+    if task == Task.CLASSIFICATION:
+        target_transform = {"DX": transforms.Compose([task.label_transform, AsTensor])}
+    elif task == Task.SURVIVAL_ANALYSIS:
+        target_transform = dict(
+            zip(task.labels, (transforms.Compose([task.label_transform, AsTensor]), transforms.Compose([AsTensor])))
+        )
+    else:
+        raise ValueError("{!r} task not supported".format(task))
+    return target_transform
+
+
+def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, standardize=False):
     """Loads 3D image volumes from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -197,6 +248,8 @@ def get_image_dataset_for_train(filename, dataset_name, rescale=False, standardi
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       dataset_name (str):
         Name of the dataset to load (e.g. 'mask', 'vol_with_bg', 'vol_without_bg').
       rescale (bool):
@@ -216,9 +269,9 @@ def get_image_dataset_for_train(filename, dataset_name, rescale=False, standardi
       ValueError:
         If both rescale and standardize are True.
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5Dataset(filename, dataset_name, task.labels, target_transform=target_transform)
 
     if dataset_name != "mask":
         if rescale and standardize:
@@ -246,12 +299,14 @@ def get_image_dataset_for_train(filename, dataset_name, rescale=False, standardi
     return ds, transform_kwargs
 
 
-def get_image_dataset_for_eval(filename, transform_kwargs, dataset_name):
+def get_image_dataset_for_eval(filename, task, transform_kwargs, dataset_name):
     """Loads 3D image volumes from HDF5 file and converts them to Tensors.
 
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       transform_kwargs (dict):
         Arguments for image transform pipeline used during training as
         returned by :func:`get_image_dataset_for_train`.
@@ -262,9 +317,9 @@ def get_image_dataset_for_eval(filename, transform_kwargs, dataset_name):
       dataset (HDF5Dataset):
         Dataset iterating over tuples of 4D ndarray and diagnosis.
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5Dataset(filename, dataset_name, task.labels, target_transform=target_transform)
 
     ds.transform = _get_image_dataset_transform(**transform_kwargs)
 
@@ -283,7 +338,7 @@ def _get_point_cloud_transform(norm: Optional[float], transpose: bool):
     return transforms.Compose(pc_transforms)
 
 
-def get_point_cloud_dataset_for_train(filename, dataset_name="pointcloud"):
+def get_point_cloud_dataset_for_train(filename, task, dataset_name="pointcloud"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -291,6 +346,8 @@ def get_point_cloud_dataset_for_train(filename, dataset_name="pointcloud"):
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       dataset_name (str):
         Optional; Name of the dataset to load.
 
@@ -300,9 +357,9 @@ def get_point_cloud_dataset_for_train(filename, dataset_name="pointcloud"):
       transform_kwargs (dict):
         A dict with arguments used for creating point cloud transform pipeline.
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5Dataset(filename, dataset_name, task.labels, target_transform=target_transform)
 
     transform_kwargs = {
         "norm": ds.meta["max_dist_q95"].astype(np.float32),
@@ -313,12 +370,14 @@ def get_point_cloud_dataset_for_train(filename, dataset_name="pointcloud"):
     return ds, transform_kwargs
 
 
-def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="pointcloud"):
+def get_point_cloud_dataset_for_eval(filename, task, transform_kwargs, dataset_name="pointcloud"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
 
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       transform_kwargs (dict):
         Arguments for point cloud transform pipeline used during training as
         returned by :func:`get_point_cloud_dataset_for_train`.
@@ -329,9 +388,9 @@ def get_point_cloud_dataset_for_eval(filename, transform_kwargs, dataset_name="p
       dataset (HDF5Dataset):
         Dataset iterating over tuples of 3D ndarray and diagnosis.
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5Dataset(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5Dataset(filename, dataset_name, task.labels, target_transform=target_transform)
 
     ds.transform = _get_point_cloud_transform(**transform_kwargs)
 
@@ -346,7 +405,7 @@ def _get_mesh_transform():
     return transforms.Compose(mesh_transforms)
 
 
-def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
+def get_mesh_dataset_for_train(filename, task, dataset_name="mesh"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -354,6 +413,8 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       dataset_name (str):
         Optional; Name of the dataset to load.
 
@@ -365,9 +426,9 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
       template (dict):
         dataset template (vertices and faces) as well as the down_sampling and up_sampling transform matrices
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5DatasetMesh(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5DatasetMesh(filename, dataset_name, task.labels, target_transform=target_transform)
     template = ds.template
     transform_kwargs = {}
     ds.transform = _get_mesh_transform(**transform_kwargs)
@@ -375,12 +436,14 @@ def get_mesh_dataset_for_train(filename, dataset_name="mesh"):
     return ds, transform_kwargs, template
 
 
-def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
+def get_mesh_dataset_for_eval(filename, task, transform_kwargs, dataset_name="mesh"):
     """Loads 3D point cloud from HDF5 file and converts them to Tensors.
 
     Args:
       filename (str):
         Path to HDF5 file.
+      task (Task):
+        Define the target label for given task.
       transform_kwargs (dict):
         Arguments for mesh transform pipeline used during training as
         returned by :func:`get_mesh_dataset_for_train`.
@@ -391,9 +454,9 @@ def get_mesh_dataset_for_eval(filename, transform_kwargs, dataset_name="mesh"):
       dataset (HDF5Dataset):
         Dataset iterating over tuples of 3D ndarray and diagnosis.
     """
-    target_transform = transforms.Compose([LabelsToIndex, AsTensor])
+    target_transform = _get_target_transform(task)
 
-    ds = HDF5DatasetMesh(filename, dataset_name, target_transform=target_transform)
+    ds = HDF5DatasetMesh(filename, dataset_name, task.labels, target_transform=target_transform)
 
     ds.transform = _get_mesh_transform(**transform_kwargs)
 
