@@ -4,34 +4,38 @@ import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import default_collate
-from torch_geometric.data import Batch
+from torch_geometric.data import Batch, Data
 
 from ..models.base import BaseModel
 
 
-def collate(data_list):
-    """
-    Code adapted from Gong et al. SpiralNet++ Pytorch implementation
-     https://github.com/sw-gong/spiralnet_plus
-
-     Notice that the standard HDF5Dataset get_item method returns two values (shape and target).
-     Since in case of meshes, Data also contains the labels, we do not need the second part the tuple in data_list.
-     We directly access batch.y to get the targets associated to that batch.
-    """
-    batch_mesh = Batch()
-    batch_mesh.batch = []
-    data_list_mesh, _ = map(list, zip(*data_list))
-
-    for key in data_list_mesh[0].keys:
-        batch_mesh[key] = default_collate([d[key] for d in data_list_mesh])
-    for i, data in enumerate(data_list_mesh):
+def batch_from_mesh_data(data_list: Sequence[Data]) -> Sequence[torch.Tensor]:
+    """Create the batch argument to be passed totorch_geometric.data.Batch constructor."""
+    batch = []
+    for i, data in enumerate(data_list):
         num_nodes = data.num_nodes
         if num_nodes is not None:
             item = torch.full((num_nodes,), i, dtype=torch.long)
-            batch_mesh.batch.append(item)
-    batch_mesh.batch = torch.cat(batch_mesh.batch, dim=0)
+            batch.append(item)
+    batch = torch.cat(batch, dim=0)
+    return batch
 
-    return batch_mesh, batch_mesh.y
+
+def mesh_collate(data_list):
+    """
+    Code adapted from Gong et al. SpiralNet++ Pytorch implementation
+    https://github.com/sw-gong/spiralnet_plus
+    """
+    if isinstance(data_list[0], Data):
+        batch_mesh = batch_from_mesh_data(data_list)
+        # same as default_collate for a dict
+        batch_kwargs = {key: default_collate([d[key] for d in data_list]) for key in data_list[0].keys}
+        return Batch(batch=batch_mesh, **batch_kwargs)
+    elif isinstance(data_list[0], Sequence):
+        transposed = zip(*data_list)
+        return [mesh_collate(samples) for samples in transposed]
+    else:
+        return default_collate(data_list)
 
 
 class LossWrapper(BaseModel):
@@ -111,16 +115,6 @@ class NamedDataLoader(DataLoader):
 
     def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
         super().__init__(dataset=dataset, **kwargs)
-        self._output_names = output_names
-
-    @property
-    def output_names(self) -> Sequence[str]:
-        return self._output_names
-
-
-class MeshNamedDataLoader(DataLoader):
-    def __init__(self, dataset: Dataset, *, output_names: Sequence[str], **kwargs) -> None:
-        super().__init__(dataset=dataset, collate_fn=collate, **kwargs)
         self._output_names = output_names
 
     @property

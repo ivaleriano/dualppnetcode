@@ -1,14 +1,30 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import torch
-from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data.dataloader import default_collate
 
 
 def make_riskset(time: np.ndarray) -> np.ndarray:
+    """Compute mask that represents each sample's risk set.
+
+    Parameters
+    ----------
+    time : np.ndarray, shape=(n_samples,)
+        Observed event time sorted in descending order.
+
+    Returns
+    -------
+    risk_set : np.ndarray, shape=(n_samples, n_samples)
+        Boolean matrix where the `i`-th row denotes the
+        risk set of the `i`-th instance, i.e. the indices `j`
+        for which the observer time `y_j >= y_i`.
+    """
+    assert time.ndim == 1, "expected 1D array"
+
     # sort in descending order
-    o = np.argsort(-np.squeeze(time), kind="mergesort")
-    n_samples = time.shape[0]
+    o = np.argsort(-time, kind="mergesort")
+    n_samples = len(time)
     risk_set = np.zeros((n_samples, n_samples), dtype=np.uint8)
     for i_org, i_sort in enumerate(o):
         ti = time[i_sort]
@@ -19,37 +35,18 @@ def make_riskset(time: np.ndarray) -> np.ndarray:
     return risk_set
 
 
-def cox_collate_fn(batch: List[np.ndarray], time_index: Optional[int] = -1) -> List[torch.Tensor]:
-    """Sort samples in batch by observed time (descending)"""
+def cox_collate_fn(
+    batch: List[Any], time_index: Optional[int] = -1, data_collate=default_collate
+) -> List[torch.Tensor]:
+    """Create risk set from batch."""
     transposed_data = list(zip(*batch))
     y_time = np.array(transposed_data[time_index])
-    # sort in descending order
-    # o = np.argsort(-np.squeeze(y_time), kind="mergesort")
-    data = []
-    for j, b in enumerate(transposed_data):
-        bt = [torch.as_tensor(v) for v in b]
-        data.append(torch.stack(bt, 0))
 
-    data.append(torch.tensor(make_riskset(y_time)))
+    data = []
+    for b in transposed_data:
+        bt = data_collate(b)
+        data.append(bt)
+
+    data.append(torch.from_numpy(make_riskset(y_time)))
 
     return data
-
-
-def make_loader(dataset: Dataset, batch_size: Optional[int] = None, shuffle: Optional[bool] = True) -> DataLoader:
-    # if not hasattr(dataset, "time"):
-    #     raise ValueError("dataset must have a time attribute.")
-
-    # n = dataset.time.shape[0]
-    # batch_size = batch_size or n
-    # if batch_size < n:
-    #     sampler = RandomSampler(dataset)
-    # else:
-    #     sampler = SequentialSampler(dataset)
-    if shuffle:
-        sampler = RandomSampler(dataset)
-    else:
-        sampler = SequentialSampler(dataset)
-    batch_sampler = BatchSampler(sampler, batch_size=batch_size, drop_last=False)
-
-    dataloader = DataLoader(dataset, collate_fn=cox_collate_fn, batch_sampler=batch_sampler)
-    return dataloader
