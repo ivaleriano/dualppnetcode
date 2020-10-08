@@ -15,7 +15,7 @@ from .data_utils.surv_data import cox_collate_fn
 from .models.base import BaseModel
 from .models.losses import CoxphLoss
 from .networks import mesh_networks, point_networks, vol_networks
-from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric
+from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric,BalancedAccuracy
 from .training.wrappers import LossWrapper, NamedDataLoader, mesh_collate
 
 
@@ -181,10 +181,11 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def get_metrics(self) -> Sequence[Metric]:
         """Returns a list of metrics to compute."""
+        args = self.args
         if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
             metrics = [Mean("partial_log_lik"), ConcordanceIndex("logits", "event", "time")]
         else:
-            metrics = [Mean("cross_entropy"), Accuracy("logits", "target")]
+            metrics = [Mean("cross_entropy"), Accuracy("logits", "target"),BalancedAccuracy(args.num_classes,"logits","target")]
         return metrics
 
     def get_and_init_model(self) -> BaseModel:

@@ -68,7 +68,7 @@ class CheckpointSaver(Hook):
         self._epoch = 0
         self._ckpkt_remove = []
         self._metrics = metrics
-        self._max_metrics = {}
+        self._best_metrics = {}
 
     def _forward(self, fn_name, *args):
         for m in self._metrics:
@@ -108,9 +108,9 @@ class CheckpointSaver(Hook):
         for m in self._metrics:
             stats = m.values()
             for name, value in stats.items():
-                previous = self._max_metrics.get(name, float("-inf"))
-                if value > previous:
-                    self._max_metrics[name] = value
+                previous = self._best_metrics.get(name, float("-inf"))
+                if (value > previous and not m.lower_is_better) or (value < abs(previous) and m.lower_is_better):
+                    self._best_metrics[name] = value
                     safe_name = quote(name, safe="")  # remove slashes and other bad stuff
                     path = self._checkpoint_dir / "best_discriminator_{}.pth".format(safe_name)
                     torch.save(

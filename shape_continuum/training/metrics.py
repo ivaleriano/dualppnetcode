@@ -8,6 +8,10 @@ from torch import Tensor
 
 class Metric(metaclass=ABCMeta):
     """Base class for metrics."""
+    def __init__(self, lower_is_better=False) -> None:
+        self.lower_is_better=lower_is_better
+
+
 
     @abstractmethod
     def reset(self) -> None:
@@ -23,6 +27,11 @@ class Metric(metaclass=ABCMeta):
           outputs:
             A Dict with the outputs returned by the model for the current batch.
         """
+
+    @property
+    @abstractmethod
+    def lower_is_better(self)->bool:
+        """Whether a lower value indicates better performance"""
 
     @abstractmethod
     def values(self) -> Dict[str, float]:
@@ -43,9 +52,14 @@ class Mean(Metric):
         Only scalar tensors are supported.
     """
 
-    def __init__(self, tensor_name: str) -> None:
+    def __init__(self, tensor_name: str,lower_is_better=True) -> None:
         self._tensor_name = tensor_name
         self._value = None
+        self._lower_is_better=lower_is_better
+
+    @property
+    def lower_is_better(self) ->bool:
+        return self._lower_is_better
 
     def values(self) -> Dict[str, float]:
         return {f"{self._tensor_name}/mean": self._value}
@@ -59,6 +73,7 @@ class Mean(Metric):
         assert value.dim() == 0, "tensor must be scalar"
         self._total += 1
         self._value += (value.item() - self._value) / self._total
+
 
 
 class Accuracy(Metric):
@@ -77,6 +92,10 @@ class Accuracy(Metric):
         self._prediction = prediction
         self._target = target
         self._value = None
+
+    @property
+    def lower_is_better(self) ->bool:
+        return False
 
     def values(self) -> Dict[str, float]:
         value = self._correct / self._total
@@ -115,6 +134,9 @@ class BalancedAccuracy(Metric):
         self._n_classes = n_classes
         self._prediction = prediction
         self._target = target
+    @property
+    def lower_is_better(self):
+        return False
 
     def values(self) -> Dict[str, float]:
         value = np.mean(self._correct / self._total)
