@@ -1,0 +1,89 @@
+{% set name = "torch-geometric" %}
+{% set version = "1.6.1" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/torch_geometric-{{ version }}.tar.gz"
+  sha256: 158c153bd12408dd1ac0a543fc54bc7a7bd3ee6dcff83fd50031622aa4f9259d
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . -vv"
+
+requirements:
+  host:
+    - ase
+    - googledrivedownloader
+    - h5py
+    - jinja2
+    - networkx
+    - numba
+    - numpy
+    - pandas
+    - pip
+    - python
+    - rdflib
+    - requests
+    - scikit-learn
+    - scipy
+    - pytest-runner
+    - pytorch
+    - tqdm
+  run:
+    - ase
+    - googledrivedownloader
+    - h5py
+    - jinja2
+    - networkx
+    - numba
+    - numpy
+    - pandas
+    - python
+    - rdflib
+    - requests
+    - scikit-learn
+    - scipy
+    - pytorch
+    - tqdm
+    - torch-scatter
+    - torch-sparse
+    - torch-cluster
+
+test:
+  imports:
+    - torch_geometric
+    - torch_geometric.data
+    - torch_geometric.datasets
+    - torch_geometric.io
+    - torch_geometric.nn
+    - torch_geometric.nn.conv
+    - torch_geometric.nn.conv.utils
+    - torch_geometric.nn.dense
+    - torch_geometric.nn.glob
+    - torch_geometric.nn.models
+    - torch_geometric.nn.norm
+    - torch_geometric.nn.pool
+    - torch_geometric.nn.unpool
+    - torch_geometric.transforms
+    - torch_geometric.utils
+    - torch_geometric.visualization
+  requires:
+    - mock
+    - pytest
+    - pytest-cov
+
+about:
+  home: "https://github.com/rusty1s/pytorch_geometric"
+  license: UNKNOWN
+  license_family: OTHER
+  license_file: 
+  summary: "Geometric Deep Learning Extension Library for PyTorch"
+  doc_url: 
+  dev_url: 
+
+extra:
+  recipe-maintainers:
+    - your-github-id-here

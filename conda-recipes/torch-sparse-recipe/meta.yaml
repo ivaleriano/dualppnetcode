@@ -1,0 +1,61 @@
+{% set name = "torch-sparse" %}
+{% set version = "0.6.7" %}
+{% set sha256 = "f69b2ed35baf2a9853234756a2b19e6f7ce88d2c1f029d1c7ca166d91e1adbd0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  fn: torch_sparse-{{ version }}.tar.gz
+  url: https://pypi.io/packages/source/{{ name[0] }}/torch_sparse/torch_sparse-{{ version }}.tar.gz
+  sha256: {{ sha256 }}
+
+build:
+  # If this is a new build for the same version, increment the build
+  # number. If you do not include this key, it defaults to 0.
+  number: 0
+  script: python setup.py install --single-version-externally-managed --record record.txt
+  script_env:
+    - CUDA_VERSION
+    - CUDA_HOME
+  string: py3.7_cuda10.2.89_cudnn7.6.5_0
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+  host:
+    - python
+    #- magma-cuda100==2.5.0
+    - numpy
+    - setuptools
+    - scipy
+    - pytest-runner
+    - pytorch==1.5.1
+    - torch-scatter==2.0.5
+
+  run:
+    - python
+    - cudatoolkit >=10.2,<10.3
+    - scipy >=1.0
+    - setuptools
+    - pytorch==1.5.1
+    - torch-scatter==2.0.5
+
+test:
+  # Python imports
+  imports:
+    - torch_sparse
+    - torch_sparse.utils
+
+about:
+  home: https://github.com/rusty1s/pytorch_sparse
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: 'PyTorch Extension Library of Optimized Autograd Sparse Matrix Operations'
+
+extra:
+  recipe-maintainers:
+    - sebp
