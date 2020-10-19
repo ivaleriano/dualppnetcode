@@ -60,13 +60,14 @@ class ModelTester(ModelRunner):
         device: Optional[torch.device] = None,
         # hooks: Optional[Sequence[Hook]] = None,
         progressbar: bool = True,
+        task: str = "clf",
     ) -> None:
         super().__init__(
             model=model, data=data, device=device, progressbar=progressbar,
         )
         all_names = list(chain(model.input_names, model.output_names))
         check_is_unique(all_names)
-
+        self.task = task
 
         model_data_intersect = set(model.input_names).intersection(set(data.output_names))
         if len(model_data_intersect) == 0:
@@ -91,18 +92,27 @@ class ModelTester(ModelRunner):
 
         logits = torch.Tensor().cuda()
         targets = torch.LongTensor().cuda()
+        target_event = torch.ByteTensor().cuda()
+        target_time = torch.DoubleTensor().cuda()
         #pbar = tqdm(self.data, total=len(self.data), disable=not self.progressbar)
         for batch in self.data:
             batch = self._batch_to_device(batch)
             outputs = self._step(batch)
             logits = torch.cat([logits,outputs["logits"]],dim=0)
-            targets = torch.cat([targets,batch["target"]])
-        return {"logits":logits,"target":targets}
+            if self.task == "clf":
+                targets = torch.cat([targets,batch["target"]])
+            else:
+                target_event = torch.cat([target_event, batch["event"]])
+                target_time = torch.cat([target_time, batch["time"]])
+
+            #     target_time = torch.cat([target_time,batch["target_time"]])
+            #     target_time = torch.cat([target_time, batch["target_event"]])
+        return {"logits":logits,"target":targets,"target_event":target_event,"target_time":target_time}
 
 
 
-def evaluate_model(model:Module,DataLoader:DataLoaderWrapper,metrics:Sequence[Metric]) -> Sequence[Dict[str,Tensor]]:
-    tester = ModelTester(model=model,data=DataLoader,device=torch.device("cuda"),progressbar=True)
+def evaluate_model(model:Module,DataLoader:DataLoaderWrapper,metrics:Sequence[Metric],task:str="clf") -> Sequence[Dict[str,Tensor]]:
+    tester = ModelTester(model=model,data=DataLoader,device=torch.device("cuda"),progressbar=True,task=task)
     in_out_dict = tester._run()
     metrics_dict = {}
     for m in metrics:

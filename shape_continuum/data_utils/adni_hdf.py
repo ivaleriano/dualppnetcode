@@ -14,8 +14,8 @@ from ..data_processing import mesh_sampling
 
 DIAGNOSIS_CODES = {
     "CN": np.array(0, dtype=np.int64),
-    "MCI": np.array(1, dtype=np.int64),
-    "Dementia": np.array(2, dtype=np.int64),
+    # "MCI": np.array(1, dtype=np.int64),
+    "Dementia": np.array(1, dtype=np.int64),
 }
 PROGRESSION_STATUS = {
     "no": np.array([0], dtype=np.uint8),

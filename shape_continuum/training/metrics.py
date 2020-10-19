@@ -4,6 +4,7 @@ from typing import Dict
 import numpy as np
 from sksurv.metrics import concordance_index_censored
 from torch import Tensor
+import torch
 
 
 class Metric(metaclass=ABCMeta):
@@ -107,8 +108,12 @@ class Accuracy(Metric):
 
     def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
         target_tensor = inputs[self._target].detach().cpu()
-
         pred = outputs[self._prediction].detach().cpu()
+        if pred.shape[1]<2:
+            pred2 = torch.zeros([pred.shape[0],2])
+            pred2[pred[:,0]>0,1] = 1
+            pred2[pred[:,0]<=0,0] = 1
+            pred = pred2
         class_id = pred.argmax(dim=1)
         self._correct += (class_id == target_tensor).sum().item()
         self._total += pred.size()[0]
@@ -131,7 +136,7 @@ class BalancedAccuracy(Metric):
     """
 
     def __init__(self, n_classes: int, prediction: str, target: str) -> None:
-        self._n_classes = n_classes
+        self._n_classes = max(n_classes,2)
         self._prediction = prediction
         self._target = target
     @property
@@ -149,6 +154,11 @@ class BalancedAccuracy(Metric):
 
     def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
         pred = outputs[self._prediction].detach().cpu()
+        if pred.shape[1] < 2:
+            pred2 = torch.zeros([pred.shape[0], 2])
+            pred2[pred[:, 0] > 0, 1] = 1
+            pred2[pred[:, 0] <= 0, 0] = 1
+            pred = pred2
         class_id = pred.argmax(dim=1).numpy()
         target_tensor = inputs[self._target].detach().cpu().numpy().astype(class_id.dtype)
 
@@ -168,6 +178,10 @@ class ConcordanceIndex(Metric):
         self._prediction = prediction
         self._target_event = target_event
         self._target_time = target_time
+
+    @property
+    def lower_is_better(self):
+        return False
 
     def reset(self) -> None:
         """Clear the buffer of collected values."""

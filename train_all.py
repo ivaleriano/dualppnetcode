@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import pandas as pd
 from pathlib import Path
 import torch
@@ -8,7 +8,7 @@ from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
 from shape_continuum.testing.test_and_save import evaluate_model,save_csv
-from shape_continuum.training.metrics import Accuracy,BalancedAccuracy
+from shape_continuum.training.metrics import Accuracy,BalancedAccuracy,ConcordanceIndex
 
 
 
@@ -37,7 +37,7 @@ def main(args=None):
             optimizerD = factory.get_optimizer(discriminator.parameters())
             loss = factory.get_loss()
             train_metrics = factory.get_metrics()
-            train_hooks = []  # [CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5)]
+            train_hooks = []
             eval_hooks = []
 
             if args.tensorboard:
@@ -65,14 +65,20 @@ def main(args=None):
                 eval_hooks=eval_hooks,
                 device=torch.device("cuda"),
             )
-            best_net_path = checkpoints_dir / "best_discriminator_balanced_accuracy.pth"
+            if args.task == "clf":
+                best_net_path = checkpoints_dir / "best_discriminator_balanced_accuracy.pth"
+            else:
+                best_net_path = checkpoints_dir / "best_discriminator_concordance_cindex.pth"
             best_discriminator = factory.get_and_init_model()
             best_discriminator.load_state_dict(torch.load(best_net_path))
             best_discriminator.cuda()
-            param_dict = args.__dict__
+            param_dict = vars(args)
             param_dict["num_parameters"] = cli.get_number_of_parameters(best_discriminator)
-            testMetrics = [Accuracy("logits", "target"), BalancedAccuracy(args.num_classes, "logits", "target")]
-            metrics_dict, in_out_dict = evaluate_model(best_discriminator, testDataLoader, testMetrics)
+            if args.task == "clf":
+                testMetrics = [Accuracy("logits", "target"), BalancedAccuracy(args.num_classes, "logits", "target")]
+            else:
+                testMetrics = [ConcordanceIndex("logits", "target_event", "target_time")]
+            metrics_dict, in_out_dict = evaluate_model(best_discriminator, testDataLoader, testMetrics,task=args.task)
             saving_dict = save_csv(experiment_dir / "csv", param_dict, metrics_dict, in_out_dict)
             complete_dicts.append(saving_dict)
 
