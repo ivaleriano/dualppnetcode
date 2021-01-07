@@ -1,11 +1,9 @@
-from typing import Sequence, Dict, Any
-from collections import OrderedDict
+from typing import Sequence
 
 import torch.nn as nn
-from torch import mul
 
 from ..models.base import BaseModel
-from .vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls, FilmBlock
+from .vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls
 
 
 class Vol_classifier(BaseModel):
@@ -87,9 +85,9 @@ class ResNet_old(BaseModel):
         return {"logits": out}
 
 
-class ResNet(BaseModel):
+class ResNet(nn.Module):
 
-    def __init__(self, in_channels: int=1, n_outputs: int=3, bn_momentum: float=0.1, n_basefilters: int=32) -> None:
+    def __init__(self, in_channels=1, n_outputs=3, bn_momentum=0.05, n_basefilters=32):
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
@@ -115,129 +113,6 @@ class ResNet(BaseModel):
         out = self.block2(out)
         out = self.block3(out)
         #out = self.block4(out)
-        out = self.global_pool(out)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-
-        return {"logits": out}
-
-
-class InteractiveHNN(BaseModel):
-    '''
-        adapted version of Duanmu et al. (MICCAI, 2020)
-        https://link.springer.com/chapter/10.1007%2F978-3-030-59713-9_24
-    '''
-    def __init__(self,
-        in_channels: int=1,
-        n_outputs: int=3,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        ndim_non_img: int=31
-        ) -> None:
-    
-        super().__init__()
-
-        # ResNet
-        self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
-        self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
-        self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
-        self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
-
-        layers = [('aux_base', nn.Linear(ndim_non_img, 8, bias=False)),
-                              ('aux_relu', nn.ReLU()),
-                              ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
-                              ('aux_1', nn.Linear(8, n_basefilters, bias=False))]
-        self.aux=nn.Sequential(OrderedDict(layers))
-
-        self.aux_2 = nn.Linear(n_basefilters, n_basefilters, bias=False)
-        self.aux_3 = nn.Linear(n_basefilters, 2*n_basefilters, bias=False)
-        self.aux_4 = nn.Linear(2*n_basefilters, 4*n_basefilters, bias=False)
-
-    @property
-    def input_names(self) -> Sequence[str]:
-        return ("image",)
-
-    @property
-    def output_names(self) -> Sequence[str]:
-        return ("logits",)
-
-    def forward(self, x, x_aux):
-
-        out = self.conv1(x)
-        out = self.pool1(out)
-
-        attention = self.aux(x_aux)
-        batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
-        out = self.block1(out)
-
-        attention = self.aux_2(attention)
-        batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
-        out = self.block2(out)
-
-        attention = self.aux_3(attention)
-        batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
-        out = self.block3(out)
-
-        attention = self.aux_4(attention)
-        batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
-        out = self.block4(out)
-
-        out = self.global_pool(out)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-
-        return {"logits": out}
-
-
-class FilmHNN(BaseModel):
-    '''
-        adapted version of Perez et al. (AAAI, 2018)
-        https://arxiv.org/abs/1709.07871
-    '''
-    def __init__(self,
-        in_channels: int,
-        n_outputs: int,
-        bn_momentum: float,
-        n_basefilters: int,
-        filmblock_args: Dict[Any, Any]
-        ) -> None:
-    
-        super().__init__()
-
-        self.split_size = 4*n_basefilters
-        self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
-        self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
-        self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = FilmBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
-        self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
-
-    @property
-    def input_names(self) -> Sequence[str]:
-        return ("image",)
-
-    @property
-    def output_names(self) -> Sequence[str]:
-        return ("logits",)
-
-    def forward(self, x, x_aux):
-
-        out = self.conv1(x)
-        out = self.pool1(out)
-        out = self.block1(out)
-        out = self.block2(out)
-        out = self.block3(out)
-        out = self.blockX(out, x_aux)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)
