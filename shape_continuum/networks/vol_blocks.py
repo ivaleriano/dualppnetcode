@@ -323,16 +323,16 @@ class FilmBlock(nn.Module):
             self.scale = None
             self.shift = None
             film_dims = 2*film_dims
-        elif scale == False and shift == False:
+        elif (not scale) and (not shift):
             raise ValueError(f'FilmBlock must either do scale or shift')
-        elif scale == False:
+        elif not scale:
             self.scale = 1
             self.shift = None
-        elif shift == False:
+        elif not shift:
             self.shift = 0
             self.scale = None
         else:
-            raise ValueError('Unkown error occured')
+            raise ValueError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
 
         # create aux net
         layers = [('aux_base', nn.Linear(ndim_non_img, 8, bias=False)),
@@ -356,22 +356,26 @@ class FilmBlock(nn.Module):
     def rescale_features(self, feature_map, x_aux):
 
         attention = self.aux(x_aux)
+
+        assert (attention.size(0) == feature_map.size(0)) and \
+            (len(attention.size()) == 2), f'Invalid size of output tensor of auxiliary network: {attention.size()}'
+
         if self.scale == self.shift:
             v_scale, v_shift = torch.split(attention, self.split_size, dim=1)
-            v_scale = v_scale.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
-            v_shift = v_shift.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            v_scale = v_scale.view(*v_scale.size(), 1, 1, 1).expand_as(feature_map)
+            v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
             if self.scale_activation is not None:
                 v_scale = self.scale_activation(v_scale)
-        elif self.scale == None:
+        elif self.scale is None:
             v_scale = attention
-            v_scale= v_scale.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            v_scale = v_scale.view(*v_scale.size(), 1, 1, 1).expand_as(feature_map)
             v_shift = self.shift
             if self.scale_activation is not None:
                 v_scale = self.scale_activation(v_scale)
-        elif self.shift == None:
+        elif self.shift is None:
             v_scale = self.scale
             v_shift = attention
-            v_shift = v_shift.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
         else:
             raise Exception(f'Ooops, something went wrong: {self.scale}, {self.shift}')
 

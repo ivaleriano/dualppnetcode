@@ -1,4 +1,4 @@
-from typing import Sequence, Dict, Any
+from typing import Sequence, Dict, Any, Optional
 from collections import OrderedDict
 
 from torch import mul
@@ -204,9 +204,9 @@ class FilmHNN(BaseModel):
     def __init__(self,
         in_channels: int,
         n_outputs: int,
-        bn_momentum: float,
-        n_basefilters: int,
-        filmblock_args: Dict[Any, Any]
+        bn_momentum: float=0.1,
+        n_basefilters: int=8,
+        filmblock_args: Optional[Dict[Any, Any]]=None
         ) -> None:
     
         super().__init__()
@@ -217,7 +217,10 @@ class FilmHNN(BaseModel):
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
         self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
         self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = FilmBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        if filmblock_args is None:
+            self.blockX = FilmBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum)
+        else:
+            self.blockX = FilmBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8*n_basefilters, n_outputs)
 
