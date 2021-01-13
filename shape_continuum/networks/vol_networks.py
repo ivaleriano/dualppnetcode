@@ -1,7 +1,7 @@
 from typing import Sequence, Dict, Any, Optional
 from collections import OrderedDict
 
-from torch import mul
+from torch import mul, cat
 import torch.nn as nn
 
 from ..models.base import BaseModel
@@ -121,17 +121,106 @@ class ResNet(nn.Module):
         return {"logits": out}
 
 
+class ConcatHNN1FC(BaseModel):
+
+    def __init__(self,
+        in_channels: int,
+        n_outputs: int,
+        bn_momentum: float=0.1,
+        n_basefilters: int=8,
+        ndim_non_img: int=14
+        ) -> None:
+
+        super().__init__()
+        self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
+        self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
+        self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
+        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.global_pool = nn.AdaptiveAvgPool3d(1)
+        self.fc = nn.Linear(8*n_basefilters+ndim_non_img, n_outputs)
+
+    @property
+    def input_names(self) -> Sequence[str]:
+        return ("image",)
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return ("logits",)
+
+    def forward(self, x, x_aux):
+
+        out = self.conv1(x)
+        out = self.pool1(out)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.block4(out)
+        out = self.global_pool(out)
+        out = out.view(out.size(0), -1)
+        out = cat((out, x_aux), dim=1)
+        out = self.fc(out)
+
+        return {"logits": out}
+
+class ConcatHNN2FC(BaseModel):
+
+    def __init__(self,
+        in_channels: int,
+        n_outputs: int,
+        bn_momentum: float=0.1,
+        n_basefilters: int=8,
+        ndim_non_img: int=14):
+
+        super().__init__()
+        self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
+        self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
+        self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
+        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.global_pool = nn.AdaptiveAvgPool3d(1)
+        layers = [('fc1', nn.Linear(8*n_basefilters+ndim_non_img, 12)),
+                  ('dropout', nn.Dropout(p=0.5, inplace=True)),
+                  ('relu', nn.ReLU()),
+                  ('fc2', nn.Linear(12, n_outputs))]
+        self.fc = nn.Sequential(OrderedDict(layers))
+
+    @property
+    def input_names(self) -> Sequence[str]:
+        return ("image",)
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return ("logits",)
+
+    def forward(self, x, x_aux):
+
+        out = self.conv1(x)
+        out = self.pool1(out)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.block4(out)
+        out = self.global_pool(out)
+        out = out.view(out.size(0), -1)
+        out = cat((out, x_aux), dim=1)
+        out = self.fc(out)
+
+        return {"logits": out}
+
 class InteractiveHNN(BaseModel):
     '''
         adapted version of Duanmu et al. (MICCAI, 2020)
         https://link.springer.com/chapter/10.1007%2F978-3-030-59713-9_24
     '''
     def __init__(self,
-        in_channels: int=1,
-        n_outputs: int=3,
+        in_channels: int,
+        n_outputs: int,
         bn_momentum: float=0.1,
         n_basefilters: int=8,
-        ndim_non_img: int=31
+        ndim_non_img: int=14
         ) -> None:
     
         super().__init__()
