@@ -332,7 +332,7 @@ class FilmBlock(nn.Module):
             self.shift = 0
             self.scale = None
         else:
-            raise ValueError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
+            raise AttributeError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
 
         # create aux net
         layers = [('aux_base', nn.Linear(ndim_non_img, 8, bias=False)),
@@ -383,6 +383,160 @@ class FilmBlock(nn.Module):
 
     def forward(self, x, x_aux):
 
+        if self.location == 0:
+            x = self.rescale_features(x, x_aux)
+        
+        residual = x
+
+        if self.location == 1:
+            residual = self.rescale_features(residual, x_aux)
+
+        if self.location == 3:
+            x = self.rescale_features(x, x_aux)
+        out = self.conv1(x)
+        out = self.bn1(out)
+
+        if self.location == 4:
+            out = self.rescale_features(out, x_aux)
+        out = self.relu(out)
+
+        if self.location == 5:
+            out = self.rescale_features(out, x_aux)
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(residual)
+            if self.location == 2:
+                residual = self.rescale_features(residual, x_aux)
+
+        if self.location == 6:
+            out = self.rescale_features(out, x_aux)
+        out += residual
+
+        if self.location == 7:
+            out = self.rescale_features(out, x_aux)
+        out = self.relu(out)
+
+        return out
+
+class ZeNewBlock(nn.Module):
+
+    def __init__(self,
+        in_channels: int,
+        out_channels: int,
+        bn_momentum: float=0.1,
+        stride: int=2,
+        ndim_non_img: int=14,
+        location: int=0,
+        activation: str='linear',
+        scale: bool=True,
+        shift: bool=True
+        ) -> None:
+
+        super().__init__()
+
+        # init resblock
+        self.conv1 = conv3d(in_channels, out_channels, stride=stride)
+        self.bn1 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+        self.conv2 = conv3d(out_channels, out_channels)
+        self.bn2 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+        self.relu = nn.ReLU(inplace=True)
+        self.global_pool = nn.AdaptiveAvgPool3d(1)
+
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+            )
+        else:
+            self.downsample = None
+
+        # location decoding
+        self.location = location
+        film_dims = 0
+        if location in [0, 1, 3]:
+            film_dims = in_channels
+        elif location in [2, 4, 5, 6, 7]:
+            film_dims = out_channels
+        else:
+            raise ValueError(f'Invalid location specified: {location}')
+
+        squeeze_dims = film_dims
+        # shift and scale decoding
+        self.split_size = 0
+        if scale and shift:
+            self.split_size = film_dims
+            self.scale = None
+            self.shift = None
+            film_dims = 2*film_dims
+        elif (not scale) and (not shift):
+            raise ValueError(f'FilmBlock must either do scale or shift')
+        elif not scale:
+            self.scale = 1
+            self.shift = None
+        elif not shift:
+            self.shift = 0
+            self.scale = None
+        else:
+            raise AttributeError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
+
+        # create aux net
+        layers = [('aux_base', nn.Linear(ndim_non_img, 8)),
+                  ('aux_relu', nn.ReLU()),
+                  ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
+                  ('aux_out', nn.Linear(8, 8+film_dims, bias=False))]
+        self.aux = nn.Sequential(OrderedDict(layers))
+        self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
+
+        if activation == 'sigmoid':
+            self.scale_activation = nn.Sigmoid()
+        elif activation == 'tanh':
+            self.scale_activation = nn.Tanh()
+        elif activation == 'linear':
+            self.scale_activation = None
+        else:
+            raise ValueError(f'Invalid input on activation {activation}')
+
+        # sanity check for ablation study setups -> don't run this experiment twice
+        if self.location == 2 and self.downsample is None:
+            raise ValueError('this setup is equivalent to location=1 and no downsampling!')
+
+    def rescale_features(self, feature_map, x_aux):
+
+        squeeze_vector = self.global_pool(feature_map)
+        squeeze_vector = squeeze_vector.view(squeeze_vector.size(0), -1)
+        squeeze_vector = self.squeeze(squeeze_vector)
+
+        low_rank = self.aux(x_aux)  # matrix weights, shape (batch_size, 8+FilmDims)
+        v0, v1 = torch.split(low_rank, [8, low_rank.size(1)-8], dim=1)  # v0 size -> (batchsize, 8), v1 size -> (batchsize, FilmDims)
+
+        weights = torch.einsum('bi, bj->bij', v0, v1)  # weights size -> (batchsize, 8, FilmDims)
+        weights = torch.einsum('bi,bij->bj', squeeze_vector, weights)  # j = alpha and beta = filmdims
+
+        if self.scale == self.shift:
+            v_scale, v_shift = torch.split(weights, self.split_size, dim=1)
+            v_scale = v_scale.view(*v_scale.size(), 1, 1, 1).expand_as(feature_map)
+            v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
+            if self.scale_activation is not None:
+                v_scale = self.scale_activation(v_scale)
+        elif self.scale is None:
+            v_scale = weights
+            v_scale = v_scale.view(*v_scale.size(), 1, 1, 1).expand_as(feature_map)
+            v_shift = self.shift
+            if self.scale_activation is not None:
+                v_scale = self.scale_activation(v_scale)
+        elif self.shift is None:
+            v_scale = self.scale
+            v_shift = weights
+            v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
+        else:
+            raise Exception(f'Ooops, something went wrong: {self.scale}, {self.shift}')
+
+        return (v_scale * feature_map) + v_shift
+
+    def forward(self, x, x_aux):
+        
         if self.location == 0:
             x = self.rescale_features(x, x_aux)
         
