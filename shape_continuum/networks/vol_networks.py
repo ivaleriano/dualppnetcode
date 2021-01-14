@@ -1,4 +1,4 @@
-from typing import Sequence, Dict, Any, Optional
+from typing import Sequence, Dict, Any
 from collections import OrderedDict
 
 from torch import mul, cat
@@ -149,9 +149,11 @@ class ConcatHNN1FC(BaseModel):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x, x_aux):
+    def forward(self, x):
 
-        out = self.conv1(x)
+        img, tabular = x[0], x[1]
+
+        out = self.conv1(img)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -159,7 +161,7 @@ class ConcatHNN1FC(BaseModel):
         out = self.block4(out)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
-        out = cat((out, x_aux), dim=1)
+        out = cat((out, tabular), dim=1)
         out = self.fc(out)
 
         return {"logits": out}
@@ -195,9 +197,11 @@ class ConcatHNN2FC(BaseModel):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x, x_aux):
+    def forward(self, x):
 
-        out = self.conv1(x)
+        img, tabular = x[0], x[1]
+
+        out = self.conv1(img)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -205,7 +209,7 @@ class ConcatHNN2FC(BaseModel):
         out = self.block4(out)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
-        out = cat((out, x_aux), dim=1)
+        out = cat((out, tabular), dim=1)
         out = self.fc(out)
 
         return {"logits": out}
@@ -253,12 +257,14 @@ class InteractiveHNN(BaseModel):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x, x_aux):
+    def forward(self, x):
 
-        out = self.conv1(x)
+        img, tabular = x[0], x[1]
+
+        out = self.conv1(img)
         out = self.pool1(out)
 
-        attention = self.aux(x_aux)
+        attention = self.aux(tabular)
         batch_size, n_channels, D, H, W = out.size()
         out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
         out = self.block1(out)
@@ -318,14 +324,16 @@ class FilmHNN(BaseModel):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x, x_aux):
+    def forward(self, x):
 
-        out = self.conv1(x)
+        img, tabular = x[0], x[1]
+
+        out = self.conv1(img)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
         out = self.block3(out)
-        out = self.blockX(out, x_aux)
+        out = self.blockX(out, tabular)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)
@@ -363,14 +371,16 @@ class ZeNuNet(BaseModel):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x, x_aux):
+    def forward(self, x):
 
-        out = self.conv1(x)
+        img, tabular = x[0], x[1]
+
+        out = self.conv1(img)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
         out = self.block3(out)
-        out = self.blockX(out, x_aux)
+        out = self.blockX(out, tabular)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
         out = self.fc(out)

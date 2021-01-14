@@ -143,6 +143,91 @@ class HDF5Dataset(Dataset):
         return tuple(data_point)
 
 
+class HDF5DatasetHeterogeneous(HDF5Dataset):
+    """
+    HDF5Dataset Subclass specific for heterogeneous data loading
+
+    Args:
+      filename (str):
+        Path to HDF5 file.
+      dataset_name (str):
+        Name of the dataset to load (e.g. 'pointcloud', 'mask', 'vol_with_bg').
+      target_labels (list of str):
+        The names of attributes to retrieve as labels.
+      transform (callable):
+        Optional; A function that takes an image of an individual data point
+        (e.g. images, point clouds) and returns transformed version.
+      target_transform (dict mapping str to callable):
+        Optional; The key should be the name of a label attribute passed as `target_labels`,
+        the value a function that takes in a label and transforms it.
+      tabular_transform (callable):
+        Optional; A function that takes tabular data of an individual data point 
+        and returns transformed version.
+    """
+
+    def __init__(
+        self,
+        filename: str,
+        dataset_name: str,
+        target_labels: Sequence[str],
+        transform: Optional[DataTransformFn] = None,
+        target_transform: Optional[Dict[str, TargetTransformFn]] = None,
+        tabular_transform: Optional[TargetTransformFn] = None
+    ) -> None:
+        self.target_labels = target_labels
+        self.img_transform = transform
+        self.target_transform = target_transform
+        self.tabular_transform = tabular_transform
+        self._load(filename, dataset_name)
+
+    # overrides
+    def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
+        data = []
+        targets = {k: [] for k in self.target_labels}
+        visits = []
+        with h5py.File(filename, "r") as hf:
+            for image_uid, g in hf.items():
+                if image_uid == "stats":
+                    continue
+                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
+
+                for label in self.target_labels:
+                    targets[label].append(g.attrs[label])
+
+                data.append(
+                    (self._get_data(g[roi][dataset_name]),
+                    self._get_tabular_data(g['tabular'])
+                    ))
+
+            meta = self._get_meta_data(hf["stats"][roi][dataset_name])
+
+        self.data = data
+        self.targets = targets
+        self.visits = visits
+        self.meta = meta
+
+    def _get_tabular_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
+        tabular = data[:]
+        return tabular
+
+    # overrides
+    def __getitem__(self, index: int) -> Sequence[np.ndarray]:
+        img, tabular = self.data[index]
+        if self.img_transform is not None:
+            img = self.img_transform(img)
+        if self.tabular_transform is not None:
+            tabular = self.tabular_transform(tabular)
+
+        data_point = [(img, tabular)]
+        for label in self.target_labels:
+            target = self.targets[label][index]
+            if self.target_transform is not None:
+                target = self.target_transform[label](target)
+            data_point.append(target)
+
+        return tuple(data_point)
+
+
 class HDF5DatasetMesh(HDF5Dataset):
     """
     HDF5Dataset Subclass specific for loading triangular meshes
