@@ -257,6 +257,45 @@ class BaseModelFactory(metaclass=ABCMeta):
         """Returns a data loader instance for training, evaluation, and testing, respectively."""
 
 
+class HeterogeneousModelFactory(BaseModelFactory):
+    """Factory for models taking 3D image volumes and tabular data."""
+
+    def get_data(self):
+        args = self.args
+        train_data, transform_kwargs, transform_tabular_kwargs = adni_hdf.get_heterogeneous_dataset_for_train(
+            args.train_data, self._task, args.shape, minmax=True,
+            normalize_tabular=False
+        )
+        trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)  # TOOD ? Image durch Heterogeneous?
+
+        eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
+        valDataLoader = self._make_named_data_loader(eval_data, ["image"])  # TOOD ? Image durch Heterogeneous?
+
+        test_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
+        testDataLoader = self._make_named_data_loader(test_data, ["image"])  # TOOD ? Image durch Heterogeneous?
+        return trainDataLoader, valDataLoader, testDataLoader
+
+    def get_model(self):
+        args = self.args
+        in_channels = 1
+        if args.discriminator_net == "resnet":
+            return vol_networks.ResNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "concat1fc":
+            return vol_networks.ConcatHNN1FC(in_channels, args.num_classes)
+        elif args.discriminator_net == "concat2fc":
+            return vol_networks.ConcatHNN2FC(in_channels, args.num_classes)
+        elif args.discriminator_net == "duanmu":
+            return vol_networks.InteractiveHNN(in_channels, args.num_classes)
+        elif args.discriminator_net == "film":
+            return vol_networks.FilmHNN(in_channels, args.num_classes)
+        elif args.discriminator_net == "zecatnet":
+            return vol_networks.ZeCatNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "zenunet":
+            return vol_networks.ZeNuNet(in_channels, args.num_classes)
+        else:
+            raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
+
+
 class ImageModelFactory(BaseModelFactory):
     """Factory for models taking 3D image volumes."""
 
