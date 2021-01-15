@@ -175,7 +175,7 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
         tabular_transform: Optional[TargetTransformFn] = None
     ) -> None:
         self.target_labels = target_labels
-        self.img_transform = transform
+        self.transform = transform
         self.target_transform = target_transform
         self.tabular_transform = tabular_transform
         self._load(filename, dataset_name)
@@ -226,8 +226,8 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
     # overrides
     def __getitem__(self, index: int) -> Sequence[np.ndarray]:
         img, tabular = self.data[index]
-        if self.img_transform is not None:
-            img = self.img_transform(img)
+        if self.transform is not None:
+            img = self.transform(img)
         if self.tabular_transform is not None:
             tabular = self.tabular_transform(tabular)
 
@@ -341,15 +341,26 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
     return target_transform
 
 
-def _get_tabular_dataset_transform(transform_age: bool, transform_education: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], 
-    ) -> Callable[np.ndarray]:
-    
-    tabular_transforms = []
+def _transform_tabular(x, with_mean, with_std):
+
     #    tabular data like:
     #    ['C(PTGENDER)[T.Male]', 'C(ABETA_MISSING)[T.1]',
     #    'C(TAU_MISSING)[T.1]', 'C(PTAU_MISSING)[T.1]',
     #    'C(FDG_MISSING)[T.1]', 'C(AV45_MISSING)[T.1]', 'real_age',
     #    'PTEDUCAT', 'APOE4', 'ABETA', 'TAU', 'PTAU', 'FDG', 'AV45']
+    indices = np.where(x > 0)[0]  # only features which were recorded
+    indices = indices[indices > 5]  # don't normalize MISSING features
+
+    x[indices] = (x[indices] - with_mean[indices]) / with_std[indices]
+    return x
+
+def _get_tabular_dataset_transform(transform_age: bool, transform_education: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], 
+    ) -> Callable[[np.ndarray], np.ndarray]:
+    
+    tabular_transforms = []
+
+    tabular_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+
     if transform_age:
         raise ValueError('not yet supported!')
 
@@ -361,7 +372,7 @@ def _get_tabular_dataset_transform(transform_age: bool, transform_education: boo
             with_mean = np.array(0.0, dtype=np.float32)
         if with_std is None:
             with_std = np.array(1.0, dtype=np.float32)
-        tabular_transforms.append(transforms.Lambda(lambda x: (x - with_mean) / with_std))
+        tabular_transforms.append(transforms.Lambda(lambda x: _transform_tabular(x, with_mean, with_std)))
 
     tabular_transforms.append(NumpyToTensor)
     
@@ -414,7 +425,7 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
     ds = HDF5DatasetHeterogeneous(filename, dataset_name, task.labels, target_transform=target_transform)
 
     if dataset_name != "mask":
-        if rescale and standardize and minmax:
+        if np.count_nonzero([rescale, standardize, minmax]) > 1:
             raise ValueError("only one of rescale, standardize and minmax can be True.")
     else:
         minmax = False
@@ -428,14 +439,14 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
         mean = None
         std = None
 
-    transform_kwargs = {
-        "dtype": ds.data[0].dtype,
+    transform_img_kwargs = {
+        "dtype": ds.data[0][0].dtype,
         "rescale": rescale,
         "minmax_rescale": minmax,
         "with_mean": mean,
         "with_std": std
     }
-    ds.transform = _get_image_dataset_transform(**transform_kwargs)
+    ds.transform = _get_image_dataset_transform(**transform_img_kwargs)
 
     if normalize_tabular and (transform_age or transform_education):
         raise ValueError("only one of normalizing of transformation (age|education) can be True")
@@ -454,7 +465,7 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
     }
     ds.tabular_transform = _get_tabular_dataset_transform(**transform_tabular_kwargs)
 
-    return ds, transform_kwargs, transform_tabular_kwargs
+    return ds, transform_img_kwargs, transform_tabular_kwargs
 
 
 def get_heterogeneous_dataset_for_eval(filename, task, transform_kwargs, dataset_name, transform_tabular_kwargs):
