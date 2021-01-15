@@ -341,7 +341,7 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
     return target_transform
 
 
-def _transform_tabular(x, with_mean, with_std):
+def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray) -> np.ndarray:
 
     #    tabular data like:
     #    ['C(PTGENDER)[T.Male]', 'C(ABETA_MISSING)[T.1]',
