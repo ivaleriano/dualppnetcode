@@ -1,7 +1,7 @@
 from typing import Sequence, Dict, Any
 from collections import OrderedDict
 
-from torch import mul, cat
+import torch
 import torch.nn as nn
 
 from ..models.base import BaseModel
@@ -107,8 +107,8 @@ class ResNet(nn.Module):
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
-        out = self.conv1(x)
+    def forward(self, image):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -143,15 +143,15 @@ class ConcatHNN1FC(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)
@@ -161,7 +161,7 @@ class ConcatHNN1FC(BaseModel):
         out = self.block4(out)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
-        out = cat((out, tabular), dim=1)
+        out = torch.cat((out, tabular), dim=1)
         out = self.fc(out)
 
         return {"logits": out}
@@ -191,15 +191,15 @@ class ConcatHNN2FC(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)
@@ -209,7 +209,7 @@ class ConcatHNN2FC(BaseModel):
         out = self.block4(out)
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
-        out = cat((out, tabular), dim=1)
+        out = torch.cat((out, tabular), dim=1)
         out = self.fc(out)
 
         return {"logits": out}
@@ -251,37 +251,37 @@ class InteractiveHNN(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)
 
         attention = self.aux(tabular)
         batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
+        out = torch.mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
         out = self.block1(out)
 
         attention = self.aux_2(attention)
         batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
+        out = torch.mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
         out = self.block2(out)
 
         attention = self.aux_3(attention)
         batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
+        out = torch.mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
         out = self.block3(out)
 
         attention = self.aux_4(attention)
         batch_size, n_channels, D, H, W = out.size()
-        out = mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
+        out = torch.mul(out, attention.view(batch_size, n_channels, 1, 1, 1))
         out = self.block4(out)
 
         out = self.global_pool(out)
@@ -318,15 +318,15 @@ class FilmHNN(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)
@@ -365,15 +365,15 @@ class ZeCatNet(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)
@@ -412,15 +412,15 @@ class ZeNuNet(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image",)
+        return ("heterogen",)
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, x):
+    def forward(self, heterogen):
 
-        img, tabular = x[0], x[1]
+        img, tabular = heterogen[0], heterogen[1]
 
         out = self.conv1(img)
         out = self.pool1(out)

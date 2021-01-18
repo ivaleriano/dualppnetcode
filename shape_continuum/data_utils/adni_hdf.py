@@ -194,32 +194,25 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
                 for label in self.target_labels:
                     targets[label].append(g.attrs[label])
 
-                data.append(
-                    (self._get_data(g[roi][dataset_name]),
-                    self._get_tabular_data(g['tabular'])
-                    ))
+                data.append(self._get_data(g[roi][dataset_name]))
 
-            meta = self._get_meta_data(hf["stats"], roi, dataset_name)
+            meta = self._get_meta_data(hf["stats"][roi][dataset_name])
 
         self.data = data
         self.targets = targets
         self.visits = visits
         self.meta = meta
 
-    def _get_tabular_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
-        tabular = data[:]
-        return tabular
+    def _get_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
+        img = super()._get_data(data)
+        tabular = super()._get_data(data.parent.parent["tabular"])
+        return (img, tabular)
 
-    def _get_meta_data(self, stats: h5py.Group, roi: str, dataset_name: str) -> Dict[str, Any]:
-        meta = {}
-        for key, value in stats[roi][dataset_name].items():
-            if len(value.shape) > 0:
-                meta[key] = value[:]
-            else:
-                meta[key] = np.array(value, dtype=value.dtype)
+    def _get_meta_data(self, stats: h5py.Group) -> Dict[str, Any]:
+        meta = super()._get_meta_data(stats)
 
         meta["tabular"] = {}
-        for key, value in stats["tabular"].items():
+        for key, value in stats.parent.parent["tabular"].items():
             meta["tabular"][key] = value[:]
         return meta
 
@@ -301,6 +294,12 @@ class HDF5DatasetMesh(HDF5Dataset):
         return meta
 
 
+def _minmax_rescaling(x: np.ndarray) -> np.ndarray:
+    min_val = np.amin(x)
+
+    return (x - min_val) / (np.amax(x) - min_val)
+
+
 def _get_image_dataset_transform(
     dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], minmax_rescale: Optional[bool]
 ) -> Callable[[np.ndarray], np.ndarray]:
@@ -311,7 +310,7 @@ def _get_image_dataset_transform(
         img_transforms.append(transforms.Lambda(lambda x: x / max_val))
 
     if minmax_rescale is not None and minmax_rescale:
-        img_transforms.append(transforms.Lambda(lambda x: (x - np.amin(x)) / (np.amax(x) - np.amin(x))))
+        img_transforms.append(transforms.Lambda(lambda x: _minmax_rescaling(x)))
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
@@ -362,10 +361,10 @@ def _get_tabular_dataset_transform(transform_age: bool, transform_education: boo
     tabular_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
 
     if transform_age:
-        raise ValueError('not yet supported!')
+        raise ValueError('transform_age not yet supported!')
 
     if transform_education:
-        raise ValueError('not yet supported!')
+        raise ValueError('transform_education not yet supported!')
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
