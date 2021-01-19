@@ -143,17 +143,14 @@ class ConcatHNN1FC(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -191,17 +188,14 @@ class ConcatHNN2FC(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -251,17 +245,14 @@ class InteractiveHNN(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
 
         attention = self.aux(tabular)
@@ -318,17 +309,14 @@ class FilmHNN(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -365,17 +353,14 @@ class ZeCatNet(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)
@@ -412,17 +397,14 @@ class ZeNuNet(BaseModel):
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("heterogen",)
+        return ("image","tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
         return ("logits",)
 
-    def forward(self, heterogen):
-
-        img, tabular = heterogen[0], heterogen[1]
-
-        out = self.conv1(img)
+    def forward(self, image, tabular):
+        out = self.conv1(image)
         out = self.pool1(out)
         out = self.block1(out)
         out = self.block2(out)

@@ -203,7 +203,7 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
         if self.tabular_transform is not None:
             tabular = self.tabular_transform(tabular)
 
-        data_point = [(img, tabular)]
+        data_point = [img, tabular]
         for label in self.target_labels:
             target = self.targets[label][index]
             if self.target_transform is not None:
@@ -283,6 +283,8 @@ def _get_image_dataset_transform(
     dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], minmax_rescale: Optional[bool]
 ) -> Callable[[np.ndarray], np.ndarray]:
     img_transforms = []
+
+    img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
 
     if rescale:
         max_val = np.array(np.iinfo(dtype).max, dtype=np.float32)

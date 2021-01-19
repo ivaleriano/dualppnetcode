@@ -54,6 +54,8 @@ def create_parser():
     parser.add_argument(
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
+    parser.add_argument(
+        "--heterogeneous", type=int, choices=[1, 0], default=0, help="if experiment is heterogeneous, 1, 0 otherwise.")
 
     return parser
 
@@ -266,13 +268,13 @@ class HeterogeneousModelFactory(BaseModelFactory):
             args.train_data, self._task, args.shape, minmax=True,
             normalize_tabular=False
         )
-        trainDataLoader = self._make_named_data_loader(train_data, ["heterog"], is_training=True)
+        trainDataLoader = self._make_named_data_loader(train_data, ["image", "tabular"], is_training=True)
 
         eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
-        valDataLoader = self._make_named_data_loader(eval_data, ["heterog"])
+        valDataLoader = self._make_named_data_loader(eval_data, ["image", "tabular"])
 
         test_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
-        testDataLoader = self._make_named_data_loader(test_data, ["heterog"])
+        testDataLoader = self._make_named_data_loader(test_data, ["image", "tabular"])
         return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
@@ -394,7 +396,9 @@ class MeshModelFactory(BaseModelFactory):
 
 def get_factory(args: argparse.Namespace) -> BaseModelFactory:
     """Returns a factory depending on selected data type from command line arguments."""
-    if args.shape == "pointcloud":
+    if args.heterogeneous == 1:
+        factory = HeterogeneousModelFactory(args)
+    elif args.shape == "pointcloud":
         factory = PointCloudModelFactory(args)
     elif args.shape.startswith("vol_") or args.shape == "mask":
         factory = ImageModelFactory(args)
