@@ -266,13 +266,13 @@ class HeterogeneousModelFactory(BaseModelFactory):
             args.train_data, self._task, args.shape, minmax=True,
             normalize_tabular=False
         )
-        trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)  # TOOD ? Image durch Heterogeneous?
+        trainDataLoader = self._make_named_data_loader(train_data, ["heterog"], is_training=True)
 
         eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
-        valDataLoader = self._make_named_data_loader(eval_data, ["image"])  # TOOD ? Image durch Heterogeneous?
+        valDataLoader = self._make_named_data_loader(eval_data, ["heterog"])
 
         test_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
-        testDataLoader = self._make_named_data_loader(test_data, ["image"])  # TOOD ? Image durch Heterogeneous?
+        testDataLoader = self._make_named_data_loader(test_data, ["heterog"])
         return trainDataLoader, valDataLoader, testDataLoader
 
     def get_model(self):
