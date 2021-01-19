@@ -181,33 +181,12 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
         self._load(filename, dataset_name)
 
     # overrides
-    def _load(self, filename, dataset_name, roi="Left-Hippocampus"):
-        data = []
-        targets = {k: [] for k in self.target_labels}
-        visits = []
-        with h5py.File(filename, "r") as hf:
-            for image_uid, g in hf.items():
-                if image_uid == "stats":
-                    continue
-                visits.append((g.attrs["RID"], g.attrs["VISCODE"]))
-
-                for label in self.target_labels:
-                    targets[label].append(g.attrs[label])
-
-                data.append(self._get_data(g[roi][dataset_name]))
-
-            meta = self._get_meta_data(hf["stats"][roi][dataset_name])
-
-        self.data = data
-        self.targets = targets
-        self.visits = visits
-        self.meta = meta
-
     def _get_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
         img = super()._get_data(data)
         tabular = super()._get_data(data.parent.parent["tabular"])
         return (img, tabular)
 
+    # overrides
     def _get_meta_data(self, stats: h5py.Group) -> Dict[str, Any]:
         meta = super()._get_meta_data(stats)
 
