@@ -55,15 +55,15 @@ def create_parser():
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
     parser.add_argument(
-        "--heterogeneous", ction="store_true", default=False, help="training of a heterogeneous model")
+        "--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
     parser.add_argument(
-        "--rescale_image", ction="store_true", default=False, help="rescale image samples into data type range")
+        "--rescale_image", action="store_true", default=False, help="rescale image samples into data type range")
     parser.add_argument(
-        "--standardize_image", ction="store_true", default=False, help="standardize image samples with mean and variance of whole dataset")
+        "--standardize_image", action="store_true", default=False, help="standardize image samples with mean and variance of whole dataset")
     parser.add_argument(
-        "--minmax_image", ction="store_true", default=False, help="MinMax rescaling per image sample")
+        "--minmax_image", action="store_true", default=False, help="MinMax rescaling per image sample")
     parser.add_argument(
-        "--normalize_tabular", ction="store_true", default=False, help="Normalize tabular data with mean and variance of whole dataset")
+        "--normalize_tabular", action="store_true", default=False, help="Normalize tabular data with mean and variance of whole dataset")
 
     return parser
 
