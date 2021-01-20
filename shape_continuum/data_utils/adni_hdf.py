@@ -478,7 +478,7 @@ def get_heterogeneous_dataset_for_eval(filename, task, transform_kwargs, dataset
 
     return ds
 
-def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, standardize=False):
+def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, standardize=False, minmax=False):
     """Loads 3D image volumes from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -512,9 +512,10 @@ def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, sta
     ds = HDF5Dataset(filename, dataset_name, task.labels, target_transform=target_transform)
 
     if dataset_name != "mask":
-        if rescale and standardize:
-            raise ValueError("only one of rescale and standardize can be True.")
+        if np.count_nonzero([rescale, standardize, minmax]) > 1:
+            raise ValueError("only one of rescale, standardize and minmax can be True.")
     else:
+        minmax = False
         rescale = False
         standardize = False
 
@@ -528,8 +529,9 @@ def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, sta
     transform_kwargs = {
         "dtype": ds.data[0].dtype,
         "rescale": rescale,
+        "minmax_rescale": minmax,
         "with_mean": mean,
-        "with_std": std,
+        "with_std": std
     }
 
     ds.transform = _get_image_dataset_transform(**transform_kwargs)

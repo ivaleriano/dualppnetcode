@@ -55,7 +55,15 @@ def create_parser():
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
     parser.add_argument(
-        "--heterogeneous", type=int, choices=[1, 0], default=0, help="if experiment is heterogeneous, 1, 0 otherwise.")
+        "--heterogeneous", ction="store_true", default=False, help="training of a heterogeneous model")
+    parser.add_argument(
+        "--rescale_image", ction="store_true", default=False, help="rescale image samples into data type range")
+    parser.add_argument(
+        "--standardize_image", ction="store_true", default=False, help="standardize image samples with mean and variance of whole dataset")
+    parser.add_argument(
+        "--minmax_image", ction="store_true", default=False, help="MinMax rescaling per image sample")
+    parser.add_argument(
+        "--normalize_tabular", ction="store_true", default=False, help="Normalize tabular data with mean and variance of whole dataset")
 
     return parser
 
@@ -265,15 +273,20 @@ class HeterogeneousModelFactory(BaseModelFactory):
     def get_data(self):
         args = self.args
         train_data, transform_kwargs, transform_tabular_kwargs = adni_hdf.get_heterogeneous_dataset_for_train(
-            args.train_data, self._task, args.shape, minmax=True,
-            normalize_tabular=False
+            args.train_data, self._task, args.shape, 
+            rescale=args.rescale_image, standardize=args.standardize_image, minmax=args.minmax_image,
+            transform_age=False, transform_education=False, normalize_tabular=args.normalize_tabular
         )
         trainDataLoader = self._make_named_data_loader(train_data, ["image", "tabular"], is_training=True)
 
-        eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
+        eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(
+            args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs
+        )
         valDataLoader = self._make_named_data_loader(eval_data, ["image", "tabular"])
 
-        test_data = adni_hdf.get_heterogeneous_dataset_for_eval(args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs)
+        test_data = adni_hdf.get_heterogeneous_dataset_for_eval(
+            args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs
+        )
         testDataLoader = self._make_named_data_loader(test_data, ["image", "tabular"])
         return trainDataLoader, valDataLoader, testDataLoader
 
@@ -304,7 +317,8 @@ class ImageModelFactory(BaseModelFactory):
     def get_data(self):
         args = self.args
         train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(
-            args.train_data, self._task, args.shape, rescale=True
+            args.train_data, self._task, args.shape, 
+            rescale=args.rescale_image, standardize=args.standardize_image, minmax=args.minmax_image
         )
         trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)
 
