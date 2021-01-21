@@ -34,7 +34,7 @@ def main(args=None):
 
             trainDataLoader, valDataLoader, testDataLoader = factory.get_data()
             discriminator = factory.get_and_init_model()
-            optimizerD = factory.get_optimizer(discriminator.parameters())
+            optimizerD = factory.get_optimizer(filter(lambda p: p.requires_grad, discriminator.parameters()))
             loss = factory.get_loss()
             train_metrics = factory.get_metrics()
             train_hooks = []
