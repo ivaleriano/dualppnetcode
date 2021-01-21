@@ -187,14 +187,11 @@ class ConvBnReLU_old(nn.Module):
 
 
 class ConvBnReLU(nn.Module):
-
-    def __init__(self, in_channels, out_channels, bn_momentum=0.05, kernel_size=3, stride=1, padding=1):
+    def __init__(
+        self, in_channels, out_channels, bn_momentum=0.05, kernel_size=3, stride=1, padding=1,
+    ):
         super().__init__()
-        self.conv = nn.Conv3d(in_channels, out_channels,
-                     kernel_size,
-                     stride=stride,
-                     padding=padding,
-                     bias=False)
+        self.conv = nn.Conv3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False)
         self.bn = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
         self.relu = nn.ReLU(inplace=True)
 
@@ -242,7 +239,6 @@ class ResBlock_old(nn.Module):
 
 
 class ResBlock(nn.Module):
-
     def __init__(self, in_channels, out_channels, bn_momentum=0.05, stride=1):
         super().__init__()
         self.conv1 = conv3d(in_channels, out_channels, stride=stride)
@@ -254,7 +250,7 @@ class ResBlock(nn.Module):
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+                nn.BatchNorm3d(out_channels, momentum=bn_momentum),
             )
         else:
             self.downsample = None

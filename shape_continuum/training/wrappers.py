@@ -51,7 +51,13 @@ class LossWrapper(BaseModel):
         Names of outputs returned by `loss.forward`.
     """
 
-    def __init__(self, loss: Module, input_names: Sequence[str], output_names: Optional[Sequence[str]] = None,binary = False) -> None:
+    def __init__(
+        self,
+        loss: Module,
+        input_names: Sequence[str],
+        output_names: Optional[Sequence[str]] = None,
+        binary: bool = False,
+    ) -> None:
         self._input_names = tuple(input_names)
         if output_names is None:
             self._output_names = ("loss",)
@@ -69,10 +75,10 @@ class LossWrapper(BaseModel):
     def output_names(self) -> Sequence[str]:
         return self._output_names
 
-    def forward(self, *input):
+    def forward(self, *inputs):
         if self._binary:
-            input= (torch.squeeze(input[0]),input[1].type(torch.cuda.FloatTensor))
-        outputs = self._loss(*input)
+            inputs = (torch.squeeze(inputs[0]), inputs[1].type(torch.cuda.FloatTensor))
+        outputs = self._loss(*inputs)
         # if self._binary:
         #     outputs = torch.unsqueeze(outputs,dim=-1)
         if not isinstance(outputs, (list, tuple)):

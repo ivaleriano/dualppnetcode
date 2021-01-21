@@ -112,7 +112,7 @@ class CheckpointSaver(Hook):
                 if (value > previous and not m.lower_is_better) or (value < abs(previous) and m.lower_is_better):
                     self._best_metrics[name] = value
                     safe_name = quote(name, safe="")  # remove slashes and other bad stuff
-                    safe_name = safe_name.replace("%2F","_")
+                    safe_name = safe_name.replace("%2F", "_")
                     path = self._checkpoint_dir / "best_discriminator_{}.pth".format(safe_name)
                     torch.save(
                         self._model.state_dict(), path,

@@ -4,11 +4,10 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Sequence, Tuple , Optional
+from typing import Sequence, Tuple
 
 import torch
 from torch.optim.optimizer import Optimizer
-import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
 from .data_utils import adni_hdf, mesh_utils
@@ -16,7 +15,7 @@ from .data_utils.surv_data import cox_collate_fn
 from .models.base import BaseModel
 from .models.losses import CoxphLoss
 from .networks import mesh_networks, point_networks, vol_networks
-from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric,BalancedAccuracy
+from .training.metrics import Accuracy, BalancedAccuracy, ConcordanceIndex, Mean, Metric
 from .training.wrappers import LossWrapper, NamedDataLoader, mesh_collate
 
 
@@ -61,57 +60,6 @@ def create_parser():
 
 def get_number_of_parameters(module):
     return sum(p.numel() for p in module.parameters() if p.requires_grad)
-
-
-class Trapezoid(optim.lr_scheduler._LRScheduler):
-
-    def __init__(self,
-                 optimizer,
-                 n_iterations: int,
-                 max_lr: float,
-                 start_lr: Optional[float] = None,
-                 annihilate: bool = True,
-                 last_epoch: int = -1
-                 ):
-        """
-            First warmup: Linearly increase from lower lr to max_lr, train with max_lr for most of the training.
-            After 80% of iterations, start linear decline of lr.
-            If annihilation, lr is linearly decreased towards an extremely small lr for the last 5% of iteratioins.
-            This helps the optimizer to find the abosulte minimum at the current valey.
-            Lazy: n_iterations is the total amount of iterations that this scheduler will be used for!
-            Developer's note:
-            if cyclic momentum would be implemented, according to Superconvergence paper
-            https://arxiv.org/abs/1708.07120
-            0.85 as min val works just fine. Take that value!
-        """
-
-        self.n_iters = n_iterations
-        self.max_lr = max_lr
-        if start_lr is None:
-            self.start_lr = max_lr / 10
-        else:
-            self.start_lr = start_lr
-        self.stop_warmup = int(0.1 * n_iterations)
-        self.start_decline = int(0.8 * n_iterations)
-        self.start_annihilate = int(0.95 * n_iterations) if annihilate else n_iterations
-
-        super(Trapezoid, self).__init__(optimizer, last_epoch)
-
-    def get_lr(self):
-
-        if self.last_epoch < self.stop_warmup:
-            step_size = (self.max_lr - self.start_lr) / self.stop_warmup
-            new_lr = self.start_lr + step_size * self.last_epoch
-        elif self.last_epoch < self.start_decline:
-            new_lr = self.max_lr
-        elif self.last_epoch <= self.start_annihilate:
-            step_size = (self.max_lr - self.start_lr) / (self.start_annihilate - self.start_decline)
-            new_lr = self.max_lr - step_size * (self.last_epoch - self.start_decline)
-        else:
-            step_size = (self.start_lr - self.start_lr / 20) / (self.n_iters - self.start_annihilate)
-            new_lr = self.start_lr - step_size * (self.last_epoch - self.start_annihilate)
-
-        return [new_lr for group in self.optimizer.param_groups]
 
 
 class BaseModelFactory(metaclass=ABCMeta):
@@ -232,9 +180,10 @@ class BaseModelFactory(metaclass=ABCMeta):
                 )
             else:
                 loss = LossWrapper(
-                    torch.nn.BCEWithLogitsLoss(), input_names=["logits", "target"], output_names=["cross_entropy"],
-                    binary=True
-
+                    torch.nn.BCEWithLogitsLoss(),
+                    input_names=["logits", "target"],
+                    output_names=["cross_entropy"],
+                    binary=True,
                 )
         return loss
 
@@ -244,7 +193,11 @@ class BaseModelFactory(metaclass=ABCMeta):
         if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
             metrics = [Mean("partial_log_lik"), ConcordanceIndex("logits", "event", "time")]
         else:
-            metrics = [Mean("cross_entropy"), Accuracy("logits", "target"),BalancedAccuracy(args.num_classes,"logits","target")]
+            metrics = [
+                Mean("cross_entropy"),
+                Accuracy("logits", "target"),
+                BalancedAccuracy(args.num_classes, "logits", "target"),
+            ]
         return metrics
 
     def get_and_init_model(self) -> BaseModel:
