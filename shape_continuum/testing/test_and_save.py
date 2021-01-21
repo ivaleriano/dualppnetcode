@@ -2,11 +2,10 @@ import argparse
 import os
 from itertools import chain
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import pandas as pd
 import torch
-import tqdm
 from torch import Tensor
 from torch.nn import Module
 
@@ -69,8 +68,6 @@ class ModelTester(ModelRunner):
         if len(model_data_intersect) == 0:
             raise ValueError("model inputs and data loader outputs do not agree")
 
-
-
     def _step_no_loss(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         outputs = super()._step(batch)
 
@@ -82,7 +79,7 @@ class ModelTester(ModelRunner):
         with torch.no_grad():
             return self._step_no_loss(batch)
 
-    def _run(self) -> Dict[str,Tensor]:
+    def _run(self) -> Dict[str, Tensor]:
         """Execute model for every batch."""
         self._set_model_state()
 
@@ -90,56 +87,51 @@ class ModelTester(ModelRunner):
         targets = torch.LongTensor().cuda()
         target_event = torch.ByteTensor().cuda()
         target_time = torch.DoubleTensor().cuda()
-        #pbar = tqdm(self.data, total=len(self.data), disable=not self.progressbar)
+        # pbar = tqdm(self.data, total=len(self.data), disable=not self.progressbar)
         for batch in self.data:
             batch = self._batch_to_device(batch)
             outputs = self._step(batch)
-            logits = torch.cat([logits,outputs["logits"]],dim=0)
+            logits = torch.cat([logits, outputs["logits"]], dim=0)
             if self.task == "clf":
-                targets = torch.cat([targets,batch["target"]])
+                targets = torch.cat([targets, batch["target"]])
             else:
                 target_event = torch.cat([target_event, batch["event"]])
                 target_time = torch.cat([target_time, batch["time"]])
 
             #     target_time = torch.cat([target_time,batch["target_time"]])
             #     target_time = torch.cat([target_time, batch["target_event"]])
-        return {"logits":logits,"target":targets,"target_event":target_event,"target_time":target_time}
+        return {"logits": logits, "target": targets, "target_event": target_event, "target_time": target_time}
 
 
-
-def evaluate_model(model:Module,DataLoader:DataLoaderWrapper,metrics:Sequence[Metric],task:str="clf") -> Sequence[Dict[str,Tensor]]:
-    tester = ModelTester(model=model,data=DataLoader,device=torch.device("cuda"),progressbar=True,task=task)
+def evaluate_model(
+    model: Module, DataLoader: DataLoaderWrapper, metrics: Sequence[Metric], task: str = "clf"
+) -> Sequence[Dict[str, Tensor]]:
+    tester = ModelTester(model=model, data=DataLoader, device=torch.device("cuda"), progressbar=True, task=task)
     in_out_dict = tester._run()
     metrics_dict = {}
     for m in metrics:
         m.reset()
-        m.update(inputs=in_out_dict,outputs=in_out_dict)
-        for key,value in m.values().items():
+        m.update(inputs=in_out_dict, outputs=in_out_dict)
+        for key, value in m.values().items():
             metrics_dict[key] = value
-    return metrics_dict,in_out_dict
+    return metrics_dict, in_out_dict
 
-def save_csv(csv_dir:Path,params:Dict,out_metrics:Dict[str,Tensor],log_targ_metrics:Dict[str,Tensor]):
-    os.makedirs(csv_dir,exist_ok=True)
+
+def save_csv(
+    csv_dir: Path, params: Dict[Any, Any], out_metrics: Dict[str, Tensor], log_targ_metrics: Dict[str, Tensor]
+) -> Dict[str, Any]:
+    os.makedirs(csv_dir, exist_ok=True)
     logits_path = csv_dir / "logits.csv"
     metrics_path = csv_dir / "metrics.csv"
 
     df = pd.DataFrame([log_targ_metrics])
     df.to_csv(logits_path)
-    saving_dict = {**params,**out_metrics}
+    saving_dict = {**params, **out_metrics}
     saving_dict["logits_dir"] = logits_path
     saving_dict["Name"] = saving_dict["discriminator_net"] + "-" + saving_dict["shape"]
     df = pd.DataFrame([saving_dict])
-    df.to_csv(metrics_path,index=False)
+    df.to_csv(metrics_path, index=False)
     return saving_dict
-
-
-
-
-
-
-
-
-
 
 
 def create_parser():
@@ -155,34 +147,8 @@ def create_parser():
     parser.add_argument(
         "--shape",
         default="pointcloud",
-        help="which shape representation to use "
-        "(pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
+        help="which shape representation to use (pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
     )
     parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
 
-
     return parser
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

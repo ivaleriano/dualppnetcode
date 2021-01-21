@@ -64,15 +64,15 @@ def get_number_of_parameters(module):
 
 
 class Trapezoid(optim.lr_scheduler._LRScheduler):
-
-    def __init__(self,
-                 optimizer,
-                 n_iterations: int,
-                 max_lr: float,
-                 start_lr: Optional[float] = None,
-                 annihilate: bool = True,
-                 last_epoch: int = -1
-                 ):
+    def __init__(
+        self,
+        optimizer,
+        n_iterations: int,
+        max_lr: float,
+        start_lr: Optional[float] = None,
+        annihilate: bool = True,
+        last_epoch: int = -1,
+    ) -> None:
         """
             First warmup: Linearly increase from lower lr to max_lr, train with max_lr for most of the training.
             After 80% of iterations, start linear decline of lr.
@@ -232,9 +232,10 @@ class BaseModelFactory(metaclass=ABCMeta):
                 )
             else:
                 loss = LossWrapper(
-                    torch.nn.BCEWithLogitsLoss(), input_names=["logits", "target"], output_names=["cross_entropy"],
-                    binary=True
-
+                    torch.nn.BCEWithLogitsLoss(),
+                    input_names=["logits", "target"],
+                    output_names=["cross_entropy"],
+                    binary=True,
                 )
         return loss
 
@@ -244,7 +245,11 @@ class BaseModelFactory(metaclass=ABCMeta):
         if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
             metrics = [Mean("partial_log_lik"), ConcordanceIndex("logits", "event", "time")]
         else:
-            metrics = [Mean("cross_entropy"), Accuracy("logits", "target"),BalancedAccuracy(args.num_classes,"logits","target")]
+            metrics = [
+                Mean("cross_entropy"),
+                Accuracy("logits", "target"),
+                BalancedAccuracy(args.num_classes, "logits", "target"),
+            ]
         return metrics
 
     def get_and_init_model(self) -> BaseModel:

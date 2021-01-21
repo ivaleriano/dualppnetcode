@@ -9,10 +9,9 @@ from torch import Tensor
 
 class Metric(metaclass=ABCMeta):
     """Base class for metrics."""
-    def __init__(self, lower_is_better=False) -> None:
-        self.lower_is_better=lower_is_better
 
-
+    def __init__(self, lower_is_better: bool = False) -> None:
+        self.lower_is_better = lower_is_better
 
     @abstractmethod
     def reset(self) -> None:
@@ -31,7 +30,7 @@ class Metric(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def lower_is_better(self)->bool:
+    def lower_is_better(self) -> bool:
         """Whether a lower value indicates better performance"""
 
     @abstractmethod
@@ -53,13 +52,13 @@ class Mean(Metric):
         Only scalar tensors are supported.
     """
 
-    def __init__(self, tensor_name: str,lower_is_better=True) -> None:
+    def __init__(self, tensor_name: str, lower_is_better: bool = True) -> None:
         self._tensor_name = tensor_name
         self._value = None
-        self._lower_is_better=lower_is_better
+        self._lower_is_better = lower_is_better
 
     @property
-    def lower_is_better(self) ->bool:
+    def lower_is_better(self) -> bool:
         return self._lower_is_better
 
     def values(self) -> Dict[str, float]:
@@ -74,7 +73,6 @@ class Mean(Metric):
         assert value.dim() == 0, "tensor must be scalar"
         self._total += 1
         self._value += (value.item() - self._value) / self._total
-
 
 
 class Accuracy(Metric):
@@ -95,7 +93,7 @@ class Accuracy(Metric):
         self._value = None
 
     @property
-    def lower_is_better(self) ->bool:
+    def lower_is_better(self) -> bool:
         return False
 
     def values(self) -> Dict[str, float]:
@@ -109,10 +107,10 @@ class Accuracy(Metric):
     def update(self, inputs: Dict[str, Tensor], outputs: Dict[str, Tensor]) -> None:
         target_tensor = inputs[self._target].detach().cpu()
         pred = outputs[self._prediction].detach().cpu()
-        if pred.shape[1]<2:
-            pred2 = torch.zeros([pred.shape[0],2])
-            pred2[pred[:,0]>0,1] = 1
-            pred2[pred[:,0]<=0,0] = 1
+        if pred.shape[1] < 2:
+            pred2 = torch.zeros([pred.shape[0], 2])
+            pred2[pred[:, 0] > 0, 1] = 1
+            pred2[pred[:, 0] <= 0, 0] = 1
             pred = pred2
         class_id = pred.argmax(dim=1)
         self._correct += (class_id == target_tensor).sum().item()
@@ -136,9 +134,10 @@ class BalancedAccuracy(Metric):
     """
 
     def __init__(self, n_classes: int, prediction: str, target: str) -> None:
-        self._n_classes = max(n_classes,2)
+        self._n_classes = max(n_classes, 2)
         self._prediction = prediction
         self._target = target
+
     @property
     def lower_is_better(self):
         return False

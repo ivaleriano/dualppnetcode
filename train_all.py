@@ -17,13 +17,13 @@ def main(args=None):
     args = parser.parse_args(args=args)
     complete_dicts = []
 
-    for shape in ["pointcloud","mesh","mask","vol_without_bg","vol_with_bg"]:
+    for shape in ["pointcloud", "mesh", "mask", "vol_without_bg", "vol_with_bg"]:
         if shape == "pointcloud":
-            networks = ["pointnet","pointnet++"]
+            networks = ["pointnet", "pointnet++"]
         elif shape == "mesh":
             networks = ["spiralnet"]
         else:
-            networks = ["convnet","resnet"]
+            networks = ["convnet", "resnet"]
         for net in networks:
             args.shape = shape
             args.discriminator_net = net
@@ -49,8 +49,9 @@ def main(args=None):
                 eval_hooks = [TensorBoardLogger(str(tb_log_dir / "eval"), eval_metrics_tb)]
             eval_metrics_cp = factory.get_metrics()
             eval_hooks.append(
-                CheckpointSaver(discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5,
-                                metrics=eval_metrics_cp)
+                CheckpointSaver(
+                    discriminator, checkpoints_dir, save_every_n_epochs=3, max_keep=5, metrics=eval_metrics_cp
+                )
             )
 
             train_and_evaluate(
@@ -78,7 +79,7 @@ def main(args=None):
                 testMetrics = [Accuracy("logits", "target"), BalancedAccuracy(args.num_classes, "logits", "target")]
             else:
                 testMetrics = [ConcordanceIndex("logits", "target_event", "target_time")]
-            metrics_dict, in_out_dict = evaluate_model(best_discriminator, testDataLoader, testMetrics,task=args.task)
+            metrics_dict, in_out_dict = evaluate_model(best_discriminator, testDataLoader, testMetrics, task=args.task)
             saving_dict = save_csv(experiment_dir / "csv", param_dict, metrics_dict, in_out_dict)
             complete_dicts.append(saving_dict)
 
@@ -90,17 +91,6 @@ def main(args=None):
     complete_experiment_csv = complete_experiment_dir / "metrics_and_params.csv"
     df = pd.DataFrame(complete_dicts)
     df.to_csv(complete_experiment_csv)
-
-
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
