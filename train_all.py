@@ -1,15 +1,15 @@
 from datetime import datetime
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 import torch
 
 from shape_continuum import cli
+from shape_continuum.testing.test_and_save import evaluate_model, save_csv
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
+from shape_continuum.training.metrics import Accuracy, BalancedAccuracy, ConcordanceIndex
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
-from shape_continuum.testing.test_and_save import evaluate_model,save_csv
-from shape_continuum.training.metrics import Accuracy,BalancedAccuracy,ConcordanceIndex
-
 
 
 def main(args=None):

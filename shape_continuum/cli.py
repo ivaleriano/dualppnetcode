@@ -4,11 +4,11 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Sequence, Tuple , Optional
+from typing import Optional, Sequence, Tuple
 
 import torch
-from torch.optim.optimizer import Optimizer
 import torch.optim as optim
+from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
 
 from .data_utils import adni_hdf, mesh_utils
@@ -16,7 +16,7 @@ from .data_utils.surv_data import cox_collate_fn
 from .models.base import BaseModel
 from .models.losses import CoxphLoss
 from .networks import mesh_networks, point_networks, vol_networks
-from .training.metrics import Accuracy, ConcordanceIndex, Mean, Metric,BalancedAccuracy
+from .training.metrics import Accuracy, BalancedAccuracy, ConcordanceIndex, Mean, Metric
 from .training.wrappers import LossWrapper, NamedDataLoader, mesh_collate
 
 

@@ -2,9 +2,9 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict
 
 import numpy as np
+import torch
 from sksurv.metrics import concordance_index_censored
 from torch import Tensor
-import torch
 
 
 class Metric(metaclass=ABCMeta):
