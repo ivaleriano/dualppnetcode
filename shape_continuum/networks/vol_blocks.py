@@ -1,9 +1,9 @@
+from abc import ABCMeta, abstractmethod
+from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
-from collections import OrderedDict
-from abc import ABCMeta, abstractmethod
 
 class double_conv(nn.Module):
     """(conv => BN => ReLU) * 2"""
@@ -293,22 +293,20 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
 
         super(FilmBase, self).__init__()
 
-        if location not in range(8):
+        # sanity checks
+        if location not in set(range(8)):
             raise ValueError(f'Invalid location specified: {location}')
-
         if activation not in {'tanh', 'sigmoid', 'linear'}:
             raise ValueError(f'Invalid location specified: {location}')
-
-        if (type(scale) is not bool or type(shift) is not bool) or (not scale and not shift):
+        if (not isinstance(scale, bool) or not isinstance(shift, bool)) or (not scale and not shift):
             raise ValueError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
-
+        # ResBlock
         self.conv1 = conv3d(in_channels, out_channels, stride=stride)
         self.bn1 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
         self.conv2 = conv3d(out_channels, out_channels)
         self.bn2 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
         self.relu = nn.ReLU(inplace=True)
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
@@ -316,38 +314,42 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
             )
         else:
             self.downsample = None
-
+        # Film-specific variables
         self.location = location
-
         if self.location == 2 and self.downsample is None:
             raise ValueError('This is equivalent to location=1 and no downsampling!')
-
         # location decoding
         self.film_dims = 0
         if location in {0, 1, 3}:
             self.film_dims = in_channels
         elif location in {2, 4, 5, 6, 7}:
             self.film_dims = out_channels
+        if activation == 'sigmoid':
+            self.scale_activation = nn.Sigmoid()
+        elif activation == 'tanh':
+            self.scale_activation = nn.Tanh()
+        elif activation == 'linear':
+            self.scale_activation = None
             
 
     @property
     @abstractmethod
-    def rescale_features(self, x, x_aux):
+    def rescale_features(self, feature_map, x_aux):
         """method to recalibrate feature map x"""
 
-    def forward(self, x, x_aux):
+    def forward(self, feature_map, x_aux):
 
         if self.location == 0:
-            x = self.rescale_features(x, x_aux)
+            feature_map = self.rescale_features(feature_map, x_aux)
         
-        residual = x
+        residual = feature_map
 
         if self.location == 1:
             residual = self.rescale_features(residual, x_aux)
 
         if self.location == 3:
-            x = self.rescale_features(x, x_aux)
-        out = self.conv1(x)
+            feature_map = self.rescale_features(feature_map, x_aux)
+        out = self.conv1(feature_map)
         out = self.bn1(out)
 
         if self.location == 4:
@@ -418,13 +420,7 @@ class FilmBlock(FilmBase):
                               ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
                               ('aux_out', nn.Linear(8, self.film_dims, bias=False))]
         self.aux=nn.Sequential(OrderedDict(layers))
-        if activation == 'sigmoid':
-            self.scale_activation = nn.Sigmoid()
-        elif activation == 'tanh':
-            self.scale_activation = nn.Tanh()
-        elif activation == 'linear':
-            self.scale_activation = None
-
+        
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -500,12 +496,7 @@ class ZeCatBlock(FilmBase):
                               ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
                               ('aux_out', nn.Linear(8, self.film_dims, bias=False))]
         self.aux=nn.Sequential(OrderedDict(layers))
-        if activation == 'sigmoid':
-            self.scale_activation = nn.Sigmoid()
-        elif activation == 'tanh':
-            self.scale_activation = nn.Tanh()
-        elif activation == 'linear':
-            self.scale_activation = None
+
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -582,13 +573,6 @@ class ZeNewBlock(FilmBase):
                   ('aux_out', nn.Linear(8, 8+self.film_dims, bias=False))]
         self.aux = nn.Sequential(OrderedDict(layers))
         self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
-
-        if activation == 'sigmoid':
-            self.scale_activation = nn.Sigmoid()
-        elif activation == 'tanh':
-            self.scale_activation = nn.Tanh()
-        elif activation == 'linear':
-            self.scale_activation = None
 
 
     def rescale_features(self, feature_map, x_aux):

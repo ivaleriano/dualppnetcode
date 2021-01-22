@@ -410,15 +410,16 @@ class MeshModelFactory(BaseModelFactory):
 
 def get_factory(args: argparse.Namespace) -> BaseModelFactory:
     """Returns a factory depending on selected data type from command line arguments."""
-    if args.heterogeneous == 1:
+    if args.heterogeneous:
         factory = HeterogeneousModelFactory(args)
-    elif args.shape == "pointcloud":
-        factory = PointCloudModelFactory(args)
-    elif args.shape.startswith("vol_") or args.shape == "mask":
-        factory = ImageModelFactory(args)
-    elif args.shape == "mesh":
-        factory = MeshModelFactory(args)
     else:
-        raise ValueError("shape {!r} is unsupported".format(args.shape))
+        if args.shape == "pointcloud":
+            factory = PointCloudModelFactory(args)
+        elif args.shape.startswith("vol_") or args.shape == "mask":
+            factory = ImageModelFactory(args)
+        elif args.shape == "mesh":
+            factory = MeshModelFactory(args)
+        else:
+            raise ValueError("shape {!r} is unsupported".format(args.shape))
 
     return factory

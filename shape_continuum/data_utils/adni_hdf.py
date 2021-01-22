@@ -184,7 +184,7 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
     def _get_data(self, data: Union[h5py.Dataset, h5py.Group]) -> Any:
         img = super()._get_data(data)
         tabular = super()._get_data(data.parent.parent["tabular"])
-        return (img, tabular)
+        return img, tabular
 
     # overrides
     def _get_meta_data(self, stats: h5py.Group) -> Dict[str, Any]:
@@ -280,7 +280,7 @@ def _minmax_rescaling(x: np.ndarray) -> np.ndarray:
 
 
 def _get_image_dataset_transform(
-    dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], minmax_rescale: Optional[bool]
+    dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], minmax_rescale: bool=False
 ) -> Callable[[np.ndarray], np.ndarray]:
     img_transforms = []
 
@@ -290,8 +290,8 @@ def _get_image_dataset_transform(
         max_val = np.array(np.iinfo(dtype).max, dtype=np.float32)
         img_transforms.append(transforms.Lambda(lambda x: x / max_val))
 
-    if minmax_rescale is not None and minmax_rescale:
-        img_transforms.append(transforms.Lambda(lambda x: _minmax_rescaling(x)))
+    if minmax_rescale:
+        img_transforms.append(transforms.Lambda(_minmax_rescaling()))
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
@@ -321,20 +321,18 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
     return target_transform
 
 
-def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray) -> np.ndarray:
-
-    #    tabular data like:
-    #    ['C(PTGENDER)[T.Male]', 'C(ABETA_MISSING)[T.1]',
-    #    'C(TAU_MISSING)[T.1]', 'C(PTAU_MISSING)[T.1]',
-    #    'C(FDG_MISSING)[T.1]', 'C(AV45_MISSING)[T.1]', 'real_age',
-    #    'PTEDUCAT', 'APOE4', 'ABETA', 'TAU', 'PTAU', 'FDG', 'AV45']
-    indices = np.where(x > 0)[0]  # only features which were recorded
-    indices = indices[indices > 5]  # don't normalize MISSING features
-
+def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray, indices: np.array) -> np.ndarray:
+    
+    indices = indices[x > 0]
     x[indices] = (x[indices] - with_mean[indices]) / with_std[indices]
     return x
 
-def _get_tabular_dataset_transform(transform_age: bool, transform_education: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], 
+def _get_tabular_dataset_transform(
+    transform_age: bool,
+    transform_education: bool,
+    feature_names: np.ndarray,
+    with_mean: Optional[np.ndarray],
+    with_std: Optional[np.ndarray]
     ) -> Callable[[np.ndarray], np.ndarray]:
     
     tabular_transforms = []
@@ -352,7 +350,10 @@ def _get_tabular_dataset_transform(transform_age: bool, transform_education: boo
             with_mean = np.array(0.0, dtype=np.float32)
         if with_std is None:
             with_std = np.array(1.0, dtype=np.float32)
-        tabular_transforms.append(transforms.Lambda(lambda x: _transform_tabular(x, with_mean, with_std)))
+        # find indices
+        transform_feats = ['APOE4', 'ABETA', 'TAU', 'PTAU', 'FDG', 'AV45']
+        indices = np.array([i for i, el in enumerate(feature_names) if el in transform_feats])
+        tabular_transforms.append(transforms.Lambda(lambda x: _transform_tabular(x, with_mean, with_std, indices)))
 
     tabular_transforms.append(NumpyToTensor)
     
