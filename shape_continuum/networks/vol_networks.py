@@ -5,7 +5,15 @@ import torch
 import torch.nn as nn
 
 from ..models.base import BaseModel
-from .vol_blocks import ConvBnReLU, FilmBlock, ResBlock, ZeCatBlock, ZeNewBlock, down_cls, fc_cls
+from .vol_blocks import (
+    ConvBnReLU,
+    FilmBlock,
+    ResBlock,
+    ZeCatBlock,
+    ZeNewBlock,
+    down_cls,
+    fc_cls,
+)
 
 
 class Vol_classifier(BaseModel):
@@ -87,14 +95,18 @@ class ResNet_old(BaseModel):
         return {"logits": out}
 
 
-class ResNet(nn.Module):
+class ResNet(BaseModel):
     def __init__(self, in_channels=1, n_outputs=3, bn_momentum=0.05, n_basefilters=32):
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
         # self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(4 * n_basefilters, n_outputs)
@@ -121,18 +133,64 @@ class ResNet(nn.Module):
         return {"logits": out}
 
 
+class HeterogeneousResNet(ResNet):
+    def __init__(self, in_channels=1, n_outputs=3, bn_momentum=0.1, n_basefilters=8):
+        super(HeterogeneousResNet, self).__init__(
+            in_channels=in_channels,
+            n_outputs=n_outputs,
+            bn_momentum=bn_momentum,
+            n_basefilters=n_basefilters,
+        )
+        self.block4 = ResBlock(
+            4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 4
+        self.fc = nn.Linear(8 * n_basefilters, n_outputs)
+
+    @property
+    def input_names(self) -> Sequence[str]:
+        return ("image", "tabular")
+
+    @property
+    def output_names(self) -> Sequence[str]:
+        return ("logits",)
+
+    def forward(self, image, tabular):
+        out = self.conv1(image)
+        out = self.pool1(out)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.block4(out)
+        out = self.global_pool(out)
+        out = out.view(out.size(0), -1)
+        out = self.fc(out)
+
+        return {"logits": out}
+
+
 class ConcatHNN1FC(BaseModel):
     def __init__(
-        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+        self,
+        in_channels: int,
+        n_outputs: int,
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        ndim_non_img: int = 14,
     ) -> None:
 
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.block4 = ResBlock(
+            4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters + ndim_non_img, n_outputs)
 
@@ -161,16 +219,27 @@ class ConcatHNN1FC(BaseModel):
 
 class ConcatHNN2FC(BaseModel):
     def __init__(
-        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+        self,
+        in_channels: int,
+        n_outputs: int,
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        ndim_non_img: int = 14,
     ):
 
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.block4 = ResBlock(
+            4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         layers = [
             ("fc1", nn.Linear(8 * n_basefilters + ndim_non_img, 12)),
@@ -210,7 +279,12 @@ class InteractiveHNN(BaseModel):
     """
 
     def __init__(
-        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+        self,
+        in_channels: int,
+        n_outputs: int,
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        ndim_non_img: int = 14,
     ) -> None:
 
         super().__init__()
@@ -219,9 +293,15 @@ class InteractiveHNN(BaseModel):
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.block4 = ResBlock(
+            4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
@@ -297,9 +377,18 @@ class FilmHNN(BaseModel):
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = FilmBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.blockX = FilmBlock(
+            4 * n_basefilters,
+            8 * n_basefilters,
+            bn_momentum=bn_momentum,
+            **filmblock_args
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
@@ -341,9 +430,18 @@ class ZeCatNet(BaseModel):
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = ZeCatBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.blockX = ZeCatBlock(
+            4 * n_basefilters,
+            8 * n_basefilters,
+            bn_momentum=bn_momentum,
+            **filmblock_args
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
@@ -385,9 +483,18 @@ class ZeNuNet(BaseModel):
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = ZeNewBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(
+            n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 16
+        self.block3 = ResBlock(
+            2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2
+        )  # 8
+        self.blockX = ZeNewBlock(
+            4 * n_basefilters,
+            8 * n_basefilters,
+            bn_momentum=bn_momentum,
+            **filmblock_args
+        )  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 

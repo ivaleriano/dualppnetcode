@@ -307,7 +307,7 @@ class HeterogeneousModelFactory(BaseModelFactory):
         args = self.args
         in_channels = 1
         if args.discriminator_net == "resnet":
-            return vol_networks.ResNet(in_channels, args.num_classes)
+            return vol_networks.HeterogeneousResNet(in_channels, args.num_classes)
         elif args.discriminator_net == "concat1fc":
             return vol_networks.ConcatHNN1FC(in_channels, args.num_classes)
         elif args.discriminator_net == "concat2fc":
