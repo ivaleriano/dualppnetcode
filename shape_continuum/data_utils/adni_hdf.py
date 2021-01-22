@@ -295,7 +295,7 @@ def _get_image_dataset_transform(
         img_transforms.append(transforms.Lambda(lambda x: x / max_val))
 
     if minmax_rescale:
-        img_transforms.append(transforms.Lambda(_minmax_rescaling()))
+        img_transforms.append(transforms.Lambda(_minmax_rescaling))
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
