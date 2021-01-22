@@ -327,8 +327,8 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
 
 def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray, indices: np.array) -> np.ndarray:
 
-    indices = indices[x > 0]
-    x[indices] = (x[indices] - with_mean[indices]) / with_std[indices]
+    valid_indices = np.array([index for index in indices if x[index] > 0])
+    x[valid_indices] = (x[valid_indices] - with_mean[valid_indices]) / with_std[valid_indices]
     return x
 
 
@@ -455,6 +455,7 @@ def get_heterogeneous_dataset_for_train(
     transform_tabular_kwargs = {
         "transform_age": transform_age,
         "transform_education": transform_education,
+        "feature_names": ds.meta["tabular"]["columns"],
         "with_mean": tab_mean,
         "with_std": tab_std,
     }
