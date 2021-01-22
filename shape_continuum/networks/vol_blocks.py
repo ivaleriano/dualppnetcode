@@ -1,9 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
+
 
 class double_conv(nn.Module):
     """(conv => BN => ReLU) * 2"""

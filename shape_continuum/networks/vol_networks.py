@@ -1,11 +1,11 @@
-from typing import Sequence, Dict, Any
 from collections import OrderedDict
+from typing import Any, Dict, Sequence
 
 import torch
 import torch.nn as nn
 
 from ..models.base import BaseModel
-from .vol_blocks import ConvBnReLU, ResBlock, down_cls, fc_cls, FilmBlock, ZeCatBlock, ZeNewBlock
+from .vol_blocks import ConvBnReLU, FilmBlock, ResBlock, ZeCatBlock, ZeNewBlock, down_cls, fc_cls
 
 
 class Vol_classifier(BaseModel):
