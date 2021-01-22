@@ -161,7 +161,7 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
         Optional; The key should be the name of a label attribute passed as `target_labels`,
         the value a function that takes in a label and transforms it.
       tabular_transform (callable):
-        Optional; A function that takes tabular data of an individual data point 
+        Optional; A function that takes tabular data of an individual data point
         and returns transformed version.
     """
 
@@ -172,7 +172,7 @@ class HDF5DatasetHeterogeneous(HDF5Dataset):
         target_labels: Sequence[str],
         transform: Optional[DataTransformFn] = None,
         target_transform: Optional[Dict[str, TargetTransformFn]] = None,
-        tabular_transform: Optional[TargetTransformFn] = None
+        tabular_transform: Optional[TargetTransformFn] = None,
     ) -> None:
         self.target_labels = target_labels
         self.transform = transform
@@ -280,7 +280,11 @@ def _minmax_rescaling(x: np.ndarray) -> np.ndarray:
 
 
 def _get_image_dataset_transform(
-    dtype: np.dtype, rescale: bool, with_mean: Optional[np.ndarray], with_std: Optional[np.ndarray], minmax_rescale: bool=False
+    dtype: np.dtype,
+    rescale: bool,
+    with_mean: Optional[np.ndarray],
+    with_std: Optional[np.ndarray],
+    minmax_rescale: bool = False,
 ) -> Callable[[np.ndarray], np.ndarray]:
     img_transforms = []
 
@@ -322,28 +326,29 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
 
 
 def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray, indices: np.array) -> np.ndarray:
-    
+
     indices = indices[x > 0]
     x[indices] = (x[indices] - with_mean[indices]) / with_std[indices]
     return x
+
 
 def _get_tabular_dataset_transform(
     transform_age: bool,
     transform_education: bool,
     feature_names: np.ndarray,
     with_mean: Optional[np.ndarray],
-    with_std: Optional[np.ndarray]
-    ) -> Callable[[np.ndarray], np.ndarray]:
-    
+    with_std: Optional[np.ndarray],
+) -> Callable[[np.ndarray], np.ndarray]:
+
     tabular_transforms = []
 
     tabular_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
 
     if transform_age:
-        raise ValueError('transform_age not yet supported!')
+        raise ValueError("transform_age not yet supported!")
 
     if transform_education:
-        raise ValueError('transform_education not yet supported!')
+        raise ValueError("transform_education not yet supported!")
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
@@ -351,17 +356,26 @@ def _get_tabular_dataset_transform(
         if with_std is None:
             with_std = np.array(1.0, dtype=np.float32)
         # find indices
-        transform_feats = ['APOE4', 'ABETA', 'TAU', 'PTAU', 'FDG', 'AV45']
+        transform_feats = ["APOE4", "ABETA", "TAU", "PTAU", "FDG", "AV45"]
         indices = np.array([i for i, el in enumerate(feature_names) if el in transform_feats])
         tabular_transforms.append(transforms.Lambda(lambda x: _transform_tabular(x, with_mean, with_std, indices)))
 
     tabular_transforms.append(NumpyToTensor)
-    
+
     return transforms.Compose(tabular_transforms)
 
-def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
-    rescale=False, standardize=False, minmax=False,
-    transform_age=False, transform_education=False, normalize_tabular=False):
+
+def get_heterogeneous_dataset_for_train(
+    filename,
+    task,
+    dataset_name,
+    rescale=False,
+    standardize=False,
+    minmax=False,
+    transform_age=False,
+    transform_education=False,
+    normalize_tabular=False,
+):
     """Loads 3D image volumes and tabular data from HDF5 file and converts them to Tensors.
 
     No data augmentation is applied.
@@ -382,7 +396,7 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
       minmax (bool):
         Optional; Wether to rescale the image volume to 0-1 with MinMax rescaling.
       transform_age (bool):
-        Optional; Whether to transform tabular feature age with 
+        Optional; Whether to transform tabular feature age with
         natural cubic spline with four degrees of freedom.
       transform_education (bool):
         Optional; Wether to transform tabular feature education with polynomial contrast codes.
@@ -425,7 +439,7 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
         "rescale": rescale,
         "minmax_rescale": minmax,
         "with_mean": mean,
-        "with_std": std
+        "with_std": std,
     }
     ds.transform = _get_image_dataset_transform(**transform_img_kwargs)
 
@@ -442,7 +456,7 @@ def get_heterogeneous_dataset_for_train(filename, task, dataset_name,
         "transform_age": transform_age,
         "transform_education": transform_education,
         "with_mean": tab_mean,
-        "with_std": tab_std
+        "with_std": tab_std,
     }
     ds.tabular_transform = _get_tabular_dataset_transform(**transform_tabular_kwargs)
 
@@ -463,7 +477,7 @@ def get_heterogeneous_dataset_for_eval(filename, task, transform_kwargs, dataset
       dataset_name (str):
         Name of the dataset to load (e.g. 'mask', 'vol_with_bg', 'vol_without_bg').
       transform_tabular_kwargs (dict):
-        Arguments for tabular transform pipeline used during training as 
+        Arguments for tabular transform pipeline used during training as
         returned by :func:`get_heterogeneous_dataset_for_train`.
 
     Returns:
@@ -478,6 +492,7 @@ def get_heterogeneous_dataset_for_eval(filename, task, transform_kwargs, dataset
     ds.tabular_transform = _get_tabular_dataset_transform(**transform_tabular_kwargs)
 
     return ds
+
 
 def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, standardize=False, minmax=False):
     """Loads 3D image volumes from HDF5 file and converts them to Tensors.
@@ -532,7 +547,7 @@ def get_image_dataset_for_train(filename, task, dataset_name, rescale=False, sta
         "rescale": rescale,
         "minmax_rescale": minmax,
         "with_mean": mean,
-        "with_std": std
+        "with_std": std,
     }
 
     ds.transform = _get_image_dataset_transform(**transform_kwargs)

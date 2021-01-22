@@ -282,7 +282,8 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
     """ Absract base class for models that are related to FiLM of Perez et al
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         out_channels: int,
         bn_momentum: float,
@@ -291,17 +292,21 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
         location: int,
         activation: str,
         scale: bool,
-        shift: bool) -> None:
+        shift: bool,
+    ) -> None:
 
         super(FilmBase, self).__init__()
 
         # sanity checks
         if location not in set(range(8)):
-            raise ValueError(f'Invalid location specified: {location}')
-        if activation not in {'tanh', 'sigmoid', 'linear'}:
-            raise ValueError(f'Invalid location specified: {location}')
+            raise ValueError(f"Invalid location specified: {location}")
+        if activation not in {"tanh", "sigmoid", "linear"}:
+            raise ValueError(f"Invalid location specified: {location}")
         if (not isinstance(scale, bool) or not isinstance(shift, bool)) or (not scale and not shift):
-            raise ValueError(f'scale and shift must be of type bool:\n    -> scale value: {scale}, scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}')
+            raise ValueError(
+                f"scale and shift must be of type bool:\n    -> scale value: {scale}, "
+                "scale type {type(scale)}\n    -> shift value: {shift}, shift type: {type(shift)}"
+            )
         # ResBlock
         self.conv1 = conv3d(in_channels, out_channels, stride=stride)
         self.bn1 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
@@ -312,27 +317,26 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+                nn.BatchNorm3d(out_channels, momentum=bn_momentum),
             )
         else:
             self.downsample = None
         # Film-specific variables
         self.location = location
         if self.location == 2 and self.downsample is None:
-            raise ValueError('This is equivalent to location=1 and no downsampling!')
+            raise ValueError("This is equivalent to location=1 and no downsampling!")
         # location decoding
         self.film_dims = 0
         if location in {0, 1, 3}:
             self.film_dims = in_channels
         elif location in {2, 4, 5, 6, 7}:
             self.film_dims = out_channels
-        if activation == 'sigmoid':
+        if activation == "sigmoid":
             self.scale_activation = nn.Sigmoid()
-        elif activation == 'tanh':
+        elif activation == "tanh":
             self.scale_activation = nn.Tanh()
-        elif activation == 'linear':
+        elif activation == "linear":
             self.scale_activation = None
-            
 
     @property
     @abstractmethod
@@ -343,7 +347,7 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
 
         if self.location == 0:
             feature_map = self.rescale_features(feature_map, x_aux)
-        
+
         residual = feature_map
 
         if self.location == 1:
@@ -380,17 +384,18 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
 
 
 class FilmBlock(FilmBase):
-
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         out_channels: int,
-        bn_momentum: float=0.1,
-        stride: int=2,
-        ndim_non_img: int=14,
-        location: int=0,
-        activation: str='linear',
-        scale: bool=True,
-        shift: bool=True):
+        bn_momentum: float = 0.1,
+        stride: int = 2,
+        ndim_non_img: int = 14,
+        location: int = 0,
+        activation: str = "linear",
+        scale: bool = True,
+        shift: bool = True,
+    ):
 
         super(FilmBlock, self).__init__(
             in_channels=in_channels,
@@ -401,7 +406,8 @@ class FilmBlock(FilmBase):
             location=location,
             activation=activation,
             scale=scale,
-            shift=shift)
+            shift=shift,
+        )
 
         # shift and scale decoding
         self.split_size = 0
@@ -409,7 +415,7 @@ class FilmBlock(FilmBase):
             self.split_size = self.film_dims
             self.scale = None
             self.shift = None
-            self.film_dims = 2*self.film_dims
+            self.film_dims = 2 * self.film_dims
         elif not scale:
             self.scale = 1
             self.shift = None
@@ -417,19 +423,21 @@ class FilmBlock(FilmBase):
             self.shift = 0
             self.scale = None
         # create aux net
-        layers = [('aux_base', nn.Linear(ndim_non_img, 8, bias=False)),
-                              ('aux_relu', nn.ReLU()),
-                              ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
-                              ('aux_out', nn.Linear(8, self.film_dims, bias=False))]
-        self.aux=nn.Sequential(OrderedDict(layers))
-        
+        layers = [
+            ("aux_base", nn.Linear(ndim_non_img, 8, bias=False)),
+            ("aux_relu", nn.ReLU()),
+            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(8, self.film_dims, bias=False)),
+        ]
+        self.aux = nn.Sequential(OrderedDict(layers))
 
     def rescale_features(self, feature_map, x_aux):
 
         attention = self.aux(x_aux)
 
-        assert (attention.size(0) == feature_map.size(0)) and \
-            (attention.dim() == 2), f'Invalid size of output tensor of auxiliary network: {attention.size()}'
+        assert (attention.size(0) == feature_map.size(0)) and (
+            attention.dim() == 2
+        ), f"Invalid size of output tensor of auxiliary network: {attention.size()}"
 
         if self.scale == self.shift:
             v_scale, v_shift = torch.split(attention, self.split_size, dim=1)
@@ -448,23 +456,27 @@ class FilmBlock(FilmBase):
             v_shift = attention
             v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
         else:
-            raise Exception(f'Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}')
+            raise Exception(
+                f"Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}"
+            )
 
         return (v_scale * feature_map) + v_shift
 
 
 class ZeCatBlock(FilmBase):
     # Block for ZeCatNet
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         out_channels: int,
-        bn_momentum: float=0.1,
-        stride: int=2,
-        ndim_non_img: int=14,
-        location: int=0,
-        activation: str='linear',
-        scale: bool=True,
-        shift: bool=True) -> None:
+        bn_momentum: float = 0.1,
+        stride: int = 2,
+        ndim_non_img: int = 14,
+        location: int = 0,
+        activation: str = "linear",
+        scale: bool = True,
+        shift: bool = True,
+    ) -> None:
 
         super(ZeCatBlock, self).__init__(
             in_channels=in_channels,
@@ -475,7 +487,8 @@ class ZeCatBlock(FilmBase):
             location=location,
             activation=activation,
             scale=scale,
-            shift=shift)
+            shift=shift,
+        )
 
         aux_input_dims = self.film_dims
         # shift and scale decoding
@@ -484,7 +497,7 @@ class ZeCatBlock(FilmBase):
             self.split_size = self.film_dims
             self.scale = None
             self.shift = None
-            self.film_dims = 2*self.film_dims
+            self.film_dims = 2 * self.film_dims
         elif not scale:
             self.scale = 1
             self.shift = None
@@ -493,12 +506,13 @@ class ZeCatBlock(FilmBase):
             self.scale = None
 
         # create aux net
-        layers = [('aux_base', nn.Linear(ndim_non_img+aux_input_dims, 8, bias=False)),
-                              ('aux_relu', nn.ReLU()),
-                              ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
-                              ('aux_out', nn.Linear(8, self.film_dims, bias=False))]
-        self.aux=nn.Sequential(OrderedDict(layers))
-
+        layers = [
+            ("aux_base", nn.Linear(ndim_non_img + aux_input_dims, 8, bias=False)),
+            ("aux_relu", nn.ReLU()),
+            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(8, self.film_dims, bias=False)),
+        ]
+        self.aux = nn.Sequential(OrderedDict(layers))
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -513,34 +527,37 @@ class ZeCatBlock(FilmBase):
             v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
             if self.scale_activation is not None:
                 v_scale = self.scale_activation(v_scale)
-        elif self.scale == None:
+        elif self.scale is None:
             v_scale = attention
             v_scale = v_scale.view(*v_scale.size(), 1, 1, 1).expand_as(feature_map)
             v_shift = self.shift
             if self.scale_activation is not None:
                 v_scale = self.scale_activation(v_scale)
-        elif self.shift == None:
+        elif self.shift is None:
             v_scale = self.scale
             v_shift = attention
             v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
         else:
-            raise Exception(f'Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}')
+            raise Exception(
+                f"Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}"
+            )
 
         return (v_scale * feature_map) + v_shift
 
 
 class ZeNewBlock(FilmBase):
-
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         out_channels: int,
-        bn_momentum: float=0.1,
-        stride: int=2,
-        ndim_non_img: int=14,
-        location: int=0,
-        activation: str='linear',
-        scale: bool=True,
-        shift: bool=True) -> None:
+        bn_momentum: float = 0.1,
+        stride: int = 2,
+        ndim_non_img: int = 14,
+        location: int = 0,
+        activation: str = "linear",
+        scale: bool = True,
+        shift: bool = True,
+    ) -> None:
 
         super(ZeNewBlock, self).__init__(
             in_channels=in_channels,
@@ -551,7 +568,8 @@ class ZeNewBlock(FilmBase):
             location=location,
             activation=activation,
             scale=scale,
-            shift=shift)
+            shift=shift,
+        )
 
         squeeze_dims = self.film_dims
         # shift and scale decoding
@@ -560,7 +578,7 @@ class ZeNewBlock(FilmBase):
             self.split_size = self.film_dims
             self.scale = None
             self.shift = None
-            self.film_dims = 2*self.film_dims
+            self.film_dims = 2 * self.film_dims
         elif not scale:
             self.scale = 1
             self.shift = None
@@ -569,13 +587,14 @@ class ZeNewBlock(FilmBase):
             self.scale = None
 
         # create aux net
-        layers = [('aux_base', nn.Linear(ndim_non_img, 8)),
-                  ('aux_relu', nn.ReLU()),
-                  ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
-                  ('aux_out', nn.Linear(8, 8+self.film_dims, bias=False))]
+        layers = [
+            ("aux_base", nn.Linear(ndim_non_img, 8)),
+            ("aux_relu", nn.ReLU()),
+            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(8, 8 + self.film_dims, bias=False)),
+        ]
         self.aux = nn.Sequential(OrderedDict(layers))
         self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
-
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -584,10 +603,12 @@ class ZeNewBlock(FilmBase):
         squeeze_vector = self.squeeze(squeeze_vector)
 
         low_rank = self.aux(x_aux)  # matrix weights, shape (batch_size, 8+FilmDims)
-        v0, v1 = torch.split(low_rank, [8, low_rank.size(1)-8], dim=1)  # v0 size -> (batchsize, 8), v1 size -> (batchsize, FilmDims)
+        v0, v1 = torch.split(
+            low_rank, [8, low_rank.size(1) - 8], dim=1
+        )  # v0 size -> (batchsize, 8), v1 size -> (batchsize, FilmDims)
 
-        weights = torch.einsum('bi, bj->bij', v0, v1)  # weights size -> (batchsize, 8, FilmDims)
-        weights = torch.einsum('bi,bij->bj', squeeze_vector, weights)  # j = alpha and beta = filmdims
+        weights = torch.einsum("bi, bj->bij", v0, v1)  # weights size -> (batchsize, 8, FilmDims)
+        weights = torch.einsum("bi,bij->bj", squeeze_vector, weights)  # j = alpha and beta = filmdims
 
         if self.scale == self.shift:
             v_scale, v_shift = torch.split(weights, self.split_size, dim=1)
@@ -606,6 +627,8 @@ class ZeNewBlock(FilmBase):
             v_shift = weights
             v_shift = v_shift.view(*v_shift.size(), 1, 1, 1).expand_as(feature_map)
         else:
-            raise Exception(f'Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}')
+            raise Exception(
+                f"Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}"
+            )
 
         return (v_scale * feature_map) + v_shift

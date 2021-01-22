@@ -122,28 +122,23 @@ class ResNet(nn.Module):
 
 
 class ConcatHNN1FC(BaseModel):
-
-    def __init__(self,
-        in_channels: int,
-        n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        ndim_non_img: int=14
-        ) -> None:
+    def __init__(
+        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+    ) -> None:
 
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters+ndim_non_img, n_outputs)
+        self.fc = nn.Linear(8 * n_basefilters + ndim_non_img, n_outputs)
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -163,32 +158,31 @@ class ConcatHNN1FC(BaseModel):
 
         return {"logits": out}
 
-class ConcatHNN2FC(BaseModel):
 
-    def __init__(self,
-        in_channels: int,
-        n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        ndim_non_img: int=14):
+class ConcatHNN2FC(BaseModel):
+    def __init__(
+        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+    ):
 
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        layers = [('fc1', nn.Linear(8*n_basefilters+ndim_non_img, 12)),
-                  ('dropout', nn.Dropout(p=0.5, inplace=True)),
-                  ('relu', nn.ReLU()),
-                  ('fc2', nn.Linear(12, n_outputs))]
+        layers = [
+            ("fc1", nn.Linear(8 * n_basefilters + ndim_non_img, 12)),
+            ("dropout", nn.Dropout(p=0.5, inplace=True)),
+            ("relu", nn.ReLU()),
+            ("fc2", nn.Linear(12, n_outputs)),
+        ]
         self.fc = nn.Sequential(OrderedDict(layers))
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -208,44 +202,44 @@ class ConcatHNN2FC(BaseModel):
 
         return {"logits": out}
 
+
 class InteractiveHNN(BaseModel):
-    '''
+    """
         adapted version of Duanmu et al. (MICCAI, 2020)
         https://link.springer.com/chapter/10.1007%2F978-3-030-59713-9_24
-    '''
-    def __init__(self,
-        in_channels: int,
-        n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        ndim_non_img: int=14
-        ) -> None:
-    
+    """
+
+    def __init__(
+        self, in_channels: int, n_outputs: int, bn_momentum: float = 0.1, n_basefilters: int = 8, ndim_non_img: int = 14
+    ) -> None:
+
         super().__init__()
 
         # ResNet
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.block4 = ResBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
+        self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
-        layers = [('aux_base', nn.Linear(ndim_non_img, 8, bias=False)),
-                              ('aux_relu', nn.ReLU()),
-                              ('aux_dropout', nn.Dropout(p=0.2, inplace=True)),
-                              ('aux_1', nn.Linear(8, n_basefilters, bias=False))]
-        self.aux=nn.Sequential(OrderedDict(layers))
+        layers = [
+            ("aux_base", nn.Linear(ndim_non_img, 8, bias=False)),
+            ("aux_relu", nn.ReLU()),
+            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_1", nn.Linear(8, n_basefilters, bias=False)),
+        ]
+        self.aux = nn.Sequential(OrderedDict(layers))
 
         self.aux_2 = nn.Linear(n_basefilters, n_basefilters, bias=False)
-        self.aux_3 = nn.Linear(n_basefilters, 2*n_basefilters, bias=False)
-        self.aux_4 = nn.Linear(2*n_basefilters, 4*n_basefilters, bias=False)
+        self.aux_3 = nn.Linear(n_basefilters, 2 * n_basefilters, bias=False)
+        self.aux_4 = nn.Linear(2 * n_basefilters, 4 * n_basefilters, bias=False)
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -283,33 +277,35 @@ class InteractiveHNN(BaseModel):
 
 
 class FilmHNN(BaseModel):
-    '''
+    """
         adapted version of Perez et al. (AAAI, 2018)
         https://arxiv.org/abs/1709.07871
-    '''
-    def __init__(self,
+    """
+
+    def __init__(
+        self,
         in_channels: int,
         n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        filmblock_args: Dict[Any, Any]={}
-        ) -> None:
-    
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        filmblock_args: Dict[Any, Any] = {},
+    ) -> None:
+
         super().__init__()
 
-        self.split_size = 4*n_basefilters
+        self.split_size = 4 * n_basefilters
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = FilmBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.blockX = FilmBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
+        self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -330,30 +326,30 @@ class FilmHNN(BaseModel):
 
 
 class ZeCatNet(BaseModel):
-
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        filmblock_args: Dict[Any, Any]={}
-        ) -> None:
-    
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        filmblock_args: Dict[Any, Any] = {},
+    ) -> None:
+
         super().__init__()
 
-        self.split_size = 4*n_basefilters
+        self.split_size = 4 * n_basefilters
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = ZeCatBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.blockX = ZeCatBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
+        self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
@@ -374,30 +370,30 @@ class ZeCatNet(BaseModel):
 
 
 class ZeNuNet(BaseModel):
-
-    def __init__(self,
+    def __init__(
+        self,
         in_channels: int,
         n_outputs: int,
-        bn_momentum: float=0.1,
-        n_basefilters: int=8,
-        filmblock_args: Dict[Any, Any]={}
-        ) -> None:
+        bn_momentum: float = 0.1,
+        n_basefilters: int = 8,
+        filmblock_args: Dict[Any, Any] = {},
+    ) -> None:
 
         super().__init__()
 
-        self.split_size = 4*n_basefilters
+        self.split_size = 4 * n_basefilters
         self.conv1 = ConvBnReLU(in_channels, n_basefilters, bn_momentum=bn_momentum)
         self.pool1 = nn.MaxPool3d(2, stride=2)  # 32
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
-        self.block2 = ResBlock(n_basefilters, 2*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
-        self.block3 = ResBlock(2*n_basefilters, 4*n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = ZeNewBlock(4*n_basefilters, 8*n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
+        self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
+        self.blockX = ZeNewBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(8*n_basefilters, n_outputs)
+        self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
     @property
     def input_names(self) -> Sequence[str]:
-        return ("image","tabular")
+        return ("image", "tabular")
 
     @property
     def output_names(self) -> Sequence[str]:
