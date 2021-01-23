@@ -28,7 +28,7 @@ def create_parser():
     parser.add_argument("--pretrain", type=Path, help="whether use pretrain model")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
-    parser.add_argument("--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer")
+    parser.add_argument("--optimizer", choices=["Adam", "SGD", "AdamW"], default="Adam", help="type of optimizer")
     parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
     parser.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
     parser.add_argument("--val_data", type=Path, required=True, help="path to validation dataset")
@@ -70,6 +70,13 @@ def create_parser():
         action="store_true",
         default=False,
         help="Normalize tabular data with mean and variance of whole dataset",
+    )
+    parser.add_argument(
+        "--gpu",
+        type=int,
+        default=-1,
+        help="Index of GPU on which experiment is run. Must be changed by environmnet"
+        " variable as well in order to take effect",
     )
 
     return parser
@@ -143,6 +150,10 @@ class BaseModelFactory(metaclass=ABCMeta):
             optimizerD = torch.optim.SGD(params, lr=0.01, momentum=0.9)
         elif args.optimizer == "Adam":
             optimizerD = torch.optim.Adam(
+                params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
+            )
+        elif args.optimizer == "AdamW":
+            optimizerD = torch.optim.AdamW(
                 params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
             )
         else:
@@ -318,6 +329,8 @@ class HeterogeneousModelFactory(BaseModelFactory):
             return vol_networks.FilmHNN(in_channels, args.num_classes)
         elif args.discriminator_net == "zecatnet":
             return vol_networks.ZeCatNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "zenullnet":
+            return vol_networks.ZeNullNet(in_channels, args.num_classes)
         elif args.discriminator_net == "zenunet":
             return vol_networks.ZeNuNet(in_channels, args.num_classes)
         else:

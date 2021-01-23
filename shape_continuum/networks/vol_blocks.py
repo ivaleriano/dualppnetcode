@@ -545,6 +545,92 @@ class ZeCatBlock(FilmBase):
         return (v_scale * feature_map) + v_shift
 
 
+class ZeNullBlock(nn.Module):
+    # Block for ZeNullNet
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        bn_momentum: float = 0.1,
+        stride: int = 2,
+        ndim_non_img: int = 14,
+        location: int = 0,
+        activation: str = "linear",
+        scale: bool = True,
+        shift: bool = True,
+    ) -> None:
+
+        super(ZeCatBlock, self).__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            bn_momentum=bn_momentum,
+            stride=stride,
+            ndim_non_img=ndim_non_img,
+            location=location,
+            activation=activation,
+            scale=scale,
+            shift=shift,
+        )
+
+        squeeze_dims = self.film_dims
+        # shift and scale decoding
+        self.split_size = 0
+        if scale and shift:
+            self.split_size = self.film_dims
+            self.scale = None
+            self.shift = None
+            self.film_dims = 2 * self.film_dims
+        elif not scale:
+            self.scale = 1
+            self.shift = None
+        elif not shift:
+            self.shift = 0
+            self.scale = None
+
+        # create aux net
+        layers = [
+            ("aux_base", nn.Linear(ndim_non_img, 8)),
+            ("aux_relu", nn.ReLU()),
+            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(8, 8 * self.film_dims, bias=False)),
+        ]
+        self.aux = nn.Sequential(OrderedDict(layers))
+        self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
+
+    def rescale_features(self, feature_map, x_aux):
+
+        squeeze_vector = self.global_pool(feature_map)
+        squeeze_vector = squeeze_vector.view(squeeze_vector.size(0), -1)
+        squeeze_vector = self.squeeze(squeeze_vector)
+
+        weights = self.aux(x_aux)  # matrix weights
+        weights = weights.view(
+            *squeeze_vector.size(), -1
+        )  # squeeze_vecotr.size is (batch_size, 8). After reshaping, weights has size (batch_size, 8, film_dims)
+        weights = torch.einsum("bi,bij->bj", squeeze_vector, weights)  # j = alpha and beta
+
+        if self.scale == self.shift:
+            v_scale, v_shift = torch.split(weights, self.split_size, dim=1)
+            v_scale = v_scale.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            v_shift = v_shift.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            if self.scale_activation is not None:
+                v_scale = self.scale_activation(v_scale)
+        elif self.scale is None:
+            v_scale = weights
+            v_scale = v_scale.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+            v_shift = self.shift
+            if self.scale_activation is not None:
+                v_scale = self.scale_activation(v_scale)
+        elif self.shift is None:
+            v_scale = self.scale
+            v_shift = weights
+            v_shift = v_shift.unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(feature_map)
+        else:
+            raise Exception(f"Ooops, something went wrong: {self.scale}, {self.shift}")
+
+        return (v_scale * feature_map) + v_shift
+
+
 class ZeNewBlock(FilmBase):
     def __init__(
         self,
