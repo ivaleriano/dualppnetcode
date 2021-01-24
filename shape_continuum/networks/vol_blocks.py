@@ -560,7 +560,7 @@ class ZeNullBlock(nn.Module):
         shift: bool = True,
     ) -> None:
 
-        super(ZeCatBlock, self).__init__(
+        super(ZeNullBlock, self).__init__(
             in_channels=in_channels,
             out_channels=out_channels,
             bn_momentum=bn_momentum,
