@@ -432,7 +432,7 @@ class ZeNullNet(BaseModel):
         self.block1 = ResBlock(n_basefilters, n_basefilters, bn_momentum=bn_momentum)
         self.block2 = ResBlock(n_basefilters, 2 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 16
         self.block3 = ResBlock(2 * n_basefilters, 4 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 8
-        self.blockX = ZeNullBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, **filmblock_args)  # 4
+        self.blockX = ZeNullBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.fc = nn.Linear(8 * n_basefilters, n_outputs)
 
