@@ -545,7 +545,7 @@ class ZeCatBlock(FilmBase):
         return (v_scale * feature_map) + v_shift
 
 
-class ZeNullBlock(nn.Module):
+class ZeNullBlock(FilmBase):
     # Block for ZeNullNet
     def __init__(
         self,
