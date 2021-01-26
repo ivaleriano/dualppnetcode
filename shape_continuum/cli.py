@@ -55,16 +55,18 @@ def create_parser():
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
     parser.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
-    parser.add_argument(
+    # normalization
+    norm = parser.add_mutually_exclusive_group()
+    norm.add_argument(
         "--rescale_image", action="store_true", default=False, help="rescale image samples into data type range"
     )
-    parser.add_argument(
+    norm.add_argument(
         "--standardize_image",
         action="store_true",
         default=False,
         help="standardize image samples with mean and variance of whole dataset",
     )
-    parser.add_argument("--minmax_image", action="store_true", default=False, help="MinMax rescaling per image sample")
+    norm.add_argument("--minmax_image", action="store_true", default=False, help="MinMax rescaling per image sample")
     parser.add_argument(
         "--normalize_tabular",
         action="store_true",
@@ -453,3 +455,4 @@ def get_factory(args: argparse.Namespace) -> BaseModelFactory:
             raise ValueError("shape {!r} is unsupported".format(args.shape))
 
     return factory
+

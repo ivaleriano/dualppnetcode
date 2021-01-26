@@ -395,6 +395,7 @@ class FilmBlock(FilmBase):
         activation: str = "linear",
         scale: bool = True,
         shift: bool = True,
+        bottleneck_dim: int = 10,
     ):
 
         super(FilmBlock, self).__init__(
@@ -409,6 +410,7 @@ class FilmBlock(FilmBase):
             shift=shift,
         )
 
+        self.bottleneck_dim = bottleneck_dim
         # shift and scale decoding
         self.split_size = 0
         if scale and shift:
@@ -424,10 +426,10 @@ class FilmBlock(FilmBase):
             self.scale = None
         # create aux net
         layers = [
-            ("aux_base", nn.Linear(ndim_non_img, 8, bias=False)),
+            ("aux_base", nn.Linear(ndim_non_img, self.bottleneck_dim, bias=False)),
             ("aux_relu", nn.ReLU()),
-            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
-            ("aux_out", nn.Linear(8, self.film_dims, bias=False)),
+            # ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(self.bottleneck_dim, self.film_dims, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
 
@@ -476,6 +478,7 @@ class ZeCatBlock(FilmBase):
         activation: str = "linear",
         scale: bool = True,
         shift: bool = True,
+        bottleneck_dim: int = 10,
     ) -> None:
 
         super(ZeCatBlock, self).__init__(
@@ -490,6 +493,7 @@ class ZeCatBlock(FilmBase):
             shift=shift,
         )
 
+        self.bottleneck_dim = bottleneck_dim
         aux_input_dims = self.film_dims
         # shift and scale decoding
         self.split_size = 0
@@ -507,10 +511,10 @@ class ZeCatBlock(FilmBase):
 
         # create aux net
         layers = [
-            ("aux_base", nn.Linear(ndim_non_img + aux_input_dims, 8, bias=False)),
+            ("aux_base", nn.Linear(ndim_non_img + aux_input_dims, self.bottleneck_dim, bias=False)),
             ("aux_relu", nn.ReLU()),
-            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
-            ("aux_out", nn.Linear(8, self.film_dims, bias=False)),
+            # ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(self.bottleneck_dim, self.film_dims, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
 
@@ -558,6 +562,7 @@ class ZeNullBlock(FilmBase):
         activation: str = "linear",
         scale: bool = True,
         shift: bool = True,
+        bottleneck_dim: int = 10,
     ) -> None:
 
         super(ZeNullBlock, self).__init__(
@@ -572,6 +577,7 @@ class ZeNullBlock(FilmBase):
             shift=shift,
         )
 
+        self.bottleneck_dim = bottleneck_dim
         squeeze_dims = self.film_dims
         # shift and scale decoding
         self.split_size = 0
@@ -589,13 +595,13 @@ class ZeNullBlock(FilmBase):
 
         # create aux net
         layers = [
-            ("aux_base", nn.Linear(ndim_non_img, 8)),
+            ("aux_base", nn.Linear(ndim_non_img, self.bottleneck_dim)),
             ("aux_relu", nn.ReLU()),
-            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
-            ("aux_out", nn.Linear(8, 8 * self.film_dims, bias=False)),
+            # ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(self.bottleneck_dim, self.bottleneck_dim * self.film_dims, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
-        self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
+        self.squeeze = nn.Linear(squeeze_dims, self.bottleneck_dim, bias=False)
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -643,6 +649,7 @@ class ZeNewBlock(FilmBase):
         activation: str = "linear",
         scale: bool = True,
         shift: bool = True,
+        bottleneck_dim: int = 10,
     ) -> None:
 
         super(ZeNewBlock, self).__init__(
@@ -657,6 +664,7 @@ class ZeNewBlock(FilmBase):
             shift=shift,
         )
 
+        self.bottleneck_dim = bottleneck_dim
         squeeze_dims = self.film_dims
         # shift and scale decoding
         self.split_size = 0
@@ -674,13 +682,13 @@ class ZeNewBlock(FilmBase):
 
         # create aux net
         layers = [
-            ("aux_base", nn.Linear(ndim_non_img, 8)),
+            ("aux_base", nn.Linear(ndim_non_img, self.bottleneck_dim)),
             ("aux_relu", nn.ReLU()),
-            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
-            ("aux_out", nn.Linear(8, 8 + self.film_dims, bias=False)),
+            # ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            ("aux_out", nn.Linear(self.bottleneck_dim, self.bottleneck_dim + self.film_dims, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
-        self.squeeze = nn.Linear(squeeze_dims, 8, bias=False)
+        self.squeeze = nn.Linear(squeeze_dims, self.bottleneck_dim, bias=False)
 
     def rescale_features(self, feature_map, x_aux):
 
@@ -690,7 +698,7 @@ class ZeNewBlock(FilmBase):
 
         low_rank = self.aux(x_aux)  # matrix weights, shape (batch_size, 8+FilmDims)
         v0, v1 = torch.split(
-            low_rank, [8, low_rank.size(1) - 8], dim=1
+            low_rank, [self.bottleneck_dim, low_rank.size(1) - self.bottleneck_dim], dim=1
         )  # v0 size -> (batchsize, 8), v1 size -> (batchsize, FilmDims)
 
         weights = torch.einsum("bi, bj->bij", v0, v1)  # weights size -> (batchsize, 8, FilmDims)

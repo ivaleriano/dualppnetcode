@@ -214,7 +214,7 @@ class ConcatHNN2FC(BaseModel):
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         layers = [
             ("fc1", nn.Linear(8 * n_basefilters + ndim_non_img, 12)),
-            ("dropout", nn.Dropout(p=0.5, inplace=True)),
+            # ("dropout", nn.Dropout(p=0.5, inplace=True)),
             ("relu", nn.ReLU()),
             ("fc2", nn.Linear(12, n_outputs)),
         ]
@@ -273,7 +273,7 @@ class InteractiveHNN(BaseModel):
         layers = [
             ("aux_base", nn.Linear(ndim_non_img, 8, bias=False)),
             ("aux_relu", nn.ReLU()),
-            ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
+            # ("aux_dropout", nn.Dropout(p=0.2, inplace=True)),
             ("aux_1", nn.Linear(8, n_basefilters, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
@@ -500,3 +500,37 @@ class ZeNuNet(BaseModel):
         out = self.fc(out)
 
         return {"logits": out}
+
+
+def test_models():
+
+    in_channels = 1
+    n_outputs = 1
+    n_basefilters = 8
+    filmblock_args = {"ndim_non_img": 14, "bottleneck_dim": 10}
+    img_batch = torch.rand(4, 1, 64, 64, 64)
+    tab_batch = torch.rand(4, filmblock_args["ndim_non_img"])
+
+    models = []
+    # ResNet
+    models.append(HeterogeneousResNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters))
+    # Concat1Fc
+    models.append(ConcatHNN1FC(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    # Concat2Fc
+    models.append(ConcatHNN2FC(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    # Duanmu
+    models.append(InteractiveHNN(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    # film
+    models.append(FilmHNN(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    # cat
+    models.append(ZeCatNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    # null
+    models.append(ZeNullNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    # nu
+    models.append(ZeNuNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+
+    for model in models:
+
+        out = model(image=img_batch, tabular=tab_batch)
+
+        assert out["logits"].size() == (4, n_outputs)

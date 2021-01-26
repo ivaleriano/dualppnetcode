@@ -326,7 +326,7 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
 
 
 def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray, indices: np.array) -> np.ndarray:
-
+    # >0: Biomarkers that were not acquired at a visit are 0 and their 'missing' variable is 1 -> don't normalize
     valid_indices = np.array([index for index in indices if x[index] > 0])
     x[valid_indices] = (x[valid_indices] - with_mean[valid_indices]) / with_std[valid_indices]
     return x
