@@ -455,4 +455,3 @@ def get_factory(args: argparse.Namespace) -> BaseModelFactory:
             raise ValueError("shape {!r} is unsupported".format(args.shape))
 
     return factory
-

@@ -513,21 +513,58 @@ def test_models():
 
     models = []
     # ResNet
-    models.append(HeterogeneousResNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters))
+    models.append(HeterogeneousResNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters=n_basefilters))
     # Concat1Fc
-    models.append(ConcatHNN1FC(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    models.append(
+        ConcatHNN1FC(
+            in_channels=in_channels,
+            n_outputs=n_outputs,
+            n_basefilters=n_basefilters,
+            ndim_non_img=filmblock_args["ndim_non_img"],
+        )
+    )
     # Concat2Fc
-    models.append(ConcatHNN2FC(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    models.append(
+        ConcatHNN2FC(
+            in_channels=in_channels,
+            n_outputs=n_outputs,
+            n_basefilters=n_basefilters,
+            ndim_non_img=filmblock_args["ndim_non_img"],
+        )
+    )
     # Duanmu
-    models.append(InteractiveHNN(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, ndim_non_img=filmblock_args["ndim_non_img"]))
+    models.append(
+        InteractiveHNN(
+            in_channels=in_channels,
+            n_outputs=n_outputs,
+            n_basefilters=n_basefilters,
+            ndim_non_img=filmblock_args["ndim_non_img"],
+        )
+    )
     # film
-    models.append(FilmHNN(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    models.append(
+        FilmHNN(
+            in_channels=in_channels, n_outputs=n_outputs, n_basefilters=n_basefilters, filmblock_args=filmblock_args
+        )
+    )
     # cat
-    models.append(ZeCatNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    models.append(
+        ZeCatNet(
+            in_channels=in_channels, n_outputs=n_outputs, n_basefilters=n_basefilters, filmblock_args=filmblock_args
+        )
+    )
     # null
-    models.append(ZeNullNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    models.append(
+        ZeNullNet(
+            in_channels=in_channels, n_outputs=n_outputs, n_basefilters=n_basefilters, filmblock_args=filmblock_args
+        )
+    )
     # nu
-    models.append(ZeNuNet(in_channels=in_channels, n_outputs=n_outputs, n_basefilters = n_basefilters, filmblock_args=filmblock_args))
+    models.append(
+        ZeNuNet(
+            in_channels=in_channels, n_outputs=n_outputs, n_basefilters=n_basefilters, filmblock_args=filmblock_args
+        )
+    )
 
     for model in models:
 
