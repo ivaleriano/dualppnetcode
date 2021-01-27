@@ -56,29 +56,17 @@ def create_parser():
     )
     parser.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
     # normalization
-    norm = parser.add_mutually_exclusive_group()
-    norm.add_argument(
-        "--rescale_image", action="store_true", default=False, help="rescale image samples into data type range"
+    parser.add_argument(
+        "--rescale_image",
+        choices=["rescale", "standardize", "minmax"],
+        default="rescale",
+        help="normalization function to apply to image data. Default rescale. Option: rescale, standardize, minmax.",
     )
-    norm.add_argument(
-        "--standardize_image",
-        action="store_true",
-        default=False,
-        help="standardize image samples with mean and variance of whole dataset",
-    )
-    norm.add_argument("--minmax_image", action="store_true", default=False, help="MinMax rescaling per image sample")
     parser.add_argument(
         "--normalize_tabular",
         action="store_true",
         default=False,
         help="Normalize tabular data with mean and variance of whole dataset",
-    )
-    parser.add_argument(
-        "--gpu",
-        type=int,
-        default=-1,
-        help="Index of GPU on which experiment is run. Must be changed by environmnet"
-        " variable as well in order to take effect",
     )
 
     return parser
@@ -292,13 +280,16 @@ class HeterogeneousModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
+        rescale = True if args.rescale_image == "rescale" else False
+        standardize = True if args.rescale_image == "standardize" else False
+        minmax = True if args.rescale_image == "minmax" else False
         train_data, transform_kwargs, transform_tabular_kwargs = adni_hdf.get_heterogeneous_dataset_for_train(
             args.train_data,
             self._task,
             args.shape,
-            rescale=args.rescale_image,
-            standardize=args.standardize_image,
-            minmax=args.minmax_image,
+            rescale=rescale,
+            standardize=standardize,
+            minmax=minmax,
             transform_age=False,
             transform_education=False,
             normalize_tabular=args.normalize_tabular,
@@ -344,13 +335,11 @@ class ImageModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
+        rescale = True if args.rescale_image == "rescale" else False
+        standardize = True if args.rescale_image == "standardize" else False
+        minmax = True if args.rescale_image == "minmax" else False
         train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(
-            args.train_data,
-            self._task,
-            args.shape,
-            rescale=args.rescale_image,
-            standardize=args.standardize_image,
-            minmax=args.minmax_image,
+            args.train_data, self._task, args.shape, rescale=rescale, standardize=standardize, minmax=minmax,
         )
         trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)
 
