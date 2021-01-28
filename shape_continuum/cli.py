@@ -28,7 +28,7 @@ def create_parser():
     parser.add_argument("--pretrain", type=Path, help="whether use pretrain model")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
     parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
-    parser.add_argument("--optimizer", choices=["Adam", "SGD"], default="Adam", help="type of optimizer")
+    parser.add_argument("--optimizer", choices=["Adam", "SGD", "AdamW"], default="Adam", help="type of optimizer")
     parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
     parser.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
     parser.add_argument("--val_data", type=Path, required=True, help="path to validation dataset")
@@ -53,6 +53,23 @@ def create_parser():
     )
     parser.add_argument(
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
+    )
+    parser.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
+    # normalization
+    parser.add_argument(
+        "--normalize_image",
+        choices=["rescale", "standardize", "minmax"],
+        default="rescale",
+        help="Normalization function to apply to image data. Default rescale. Options: "
+        "rescale -> divide by maximum value of datatype; "
+        "standardize -> mean and stddev of whole dataset; "
+        "minmax -> normalize to [0..1] with minimum and maximum per sample.",
+    )
+    parser.add_argument(
+        "--normalize_tabular",
+        action="store_true",
+        default=False,
+        help="Normalize tabular data with mean and variance of whole dataset",
     )
 
     return parser
@@ -126,6 +143,10 @@ class BaseModelFactory(metaclass=ABCMeta):
             optimizerD = torch.optim.SGD(params, lr=0.01, momentum=0.9)
         elif args.optimizer == "Adam":
             optimizerD = torch.optim.Adam(
+                params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
+            )
+        elif args.optimizer == "AdamW":
+            optimizerD = torch.optim.AdamW(
                 params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
             )
         else:
@@ -257,13 +278,71 @@ class BaseModelFactory(metaclass=ABCMeta):
         """Returns a data loader instance for training, evaluation, and testing, respectively."""
 
 
+class HeterogeneousModelFactory(BaseModelFactory):
+    """Factory for models taking 3D image volumes and tabular data."""
+
+    def get_data(self):
+        args = self.args
+        rescale = args.normalize_image == "rescale"
+        standardize = args.normalize_image == "standardize"
+        minmax = args.normalize_image == "minmax"
+        train_data, transform_kwargs, transform_tabular_kwargs = adni_hdf.get_heterogeneous_dataset_for_train(
+            args.train_data,
+            self._task,
+            args.shape,
+            rescale=rescale,
+            standardize=standardize,
+            minmax=minmax,
+            transform_age=False,
+            transform_education=False,
+            normalize_tabular=args.normalize_tabular,
+        )
+        trainDataLoader = self._make_named_data_loader(train_data, ["image", "tabular"], is_training=True)
+
+        eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(
+            args.val_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs
+        )
+        valDataLoader = self._make_named_data_loader(eval_data, ["image", "tabular"])
+
+        test_data = adni_hdf.get_heterogeneous_dataset_for_eval(
+            args.test_data, self._task, transform_kwargs, args.shape, transform_tabular_kwargs
+        )
+        testDataLoader = self._make_named_data_loader(test_data, ["image", "tabular"])
+        return trainDataLoader, valDataLoader, testDataLoader
+
+    def get_model(self):
+        args = self.args
+        in_channels = 1
+        if args.discriminator_net == "resnet":
+            return vol_networks.HeterogeneousResNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "concat1fc":
+            return vol_networks.ConcatHNN1FC(in_channels, args.num_classes)
+        elif args.discriminator_net == "concat2fc":
+            return vol_networks.ConcatHNN2FC(in_channels, args.num_classes)
+        elif args.discriminator_net == "duanmu":
+            return vol_networks.InteractiveHNN(in_channels, args.num_classes)
+        elif args.discriminator_net == "film":
+            return vol_networks.FilmHNN(in_channels, args.num_classes)
+        elif args.discriminator_net == "zecatnet":
+            return vol_networks.ZeCatNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "zenullnet":
+            return vol_networks.ZeNullNet(in_channels, args.num_classes)
+        elif args.discriminator_net == "zenunet":
+            return vol_networks.ZeNuNet(in_channels, args.num_classes)
+        else:
+            raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
+
+
 class ImageModelFactory(BaseModelFactory):
     """Factory for models taking 3D image volumes."""
 
     def get_data(self):
         args = self.args
+        rescale = args.normalize_image == "rescale"
+        standardize = args.normalize_image == "standardize"
+        minmax = args.normalize_image == "minmax"
         train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(
-            args.train_data, self._task, args.shape, rescale=True
+            args.train_data, self._task, args.shape, rescale=rescale, standardize=standardize, minmax=minmax,
         )
         trainDataLoader = self._make_named_data_loader(train_data, ["image"], is_training=True)
 
@@ -355,13 +434,16 @@ class MeshModelFactory(BaseModelFactory):
 
 def get_factory(args: argparse.Namespace) -> BaseModelFactory:
     """Returns a factory depending on selected data type from command line arguments."""
-    if args.shape == "pointcloud":
-        factory = PointCloudModelFactory(args)
-    elif args.shape.startswith("vol_") or args.shape == "mask":
-        factory = ImageModelFactory(args)
-    elif args.shape == "mesh":
-        factory = MeshModelFactory(args)
+    if args.heterogeneous:
+        factory = HeterogeneousModelFactory(args)
     else:
-        raise ValueError("shape {!r} is unsupported".format(args.shape))
+        if args.shape == "pointcloud":
+            factory = PointCloudModelFactory(args)
+        elif args.shape.startswith("vol_") or args.shape == "mask":
+            factory = ImageModelFactory(args)
+        elif args.shape == "mesh":
+            factory = MeshModelFactory(args)
+        else:
+            raise ValueError("shape {!r} is unsupported".format(args.shape))
 
     return factory
