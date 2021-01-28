@@ -40,7 +40,13 @@ def create_parser():
     g.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
 
     g = parser.add_argument_group("Data")
-    g.add_argument("--num_classes", type=int, default=3, help="number of classes")
+    g.add_argument(
+        "--num_classes",
+        type=int,
+        default=3,
+        help="The number of output units of the network. For binary classification, 1, "
+        "for multi-class classification, the number of classes.",
+    )
     g.add_argument(
         "--shape",
         default="pointcloud",
