@@ -14,8 +14,12 @@ from ..data_processing import mesh_sampling
 
 DIAGNOSIS_CODES = {
     "CN": np.array(0, dtype=np.int64),
-    # "MCI": np.array(1, dtype=np.int64),
     "Dementia": np.array(1, dtype=np.int64),
+}
+DIAGNOSIS_CODES_MULTICLASS = {
+    "CN": np.array(0, dtype=np.int64),
+    "MCI": np.array(1, dtype=np.int64),
+    "Dementia": np.array(2, dtype=np.int64),
 }
 PROGRESSION_STATUS = {
     "no": np.array([0], dtype=np.uint8),
@@ -32,6 +36,7 @@ AsTensor = transforms.Lambda(torch.as_tensor)
 
 class Task(enum.Enum):
     CLASSIFICATION = (["DX"], DIAGNOSIS_CODES)
+    MULTI_CLASSIFICATION = (["DX"], DIAGNOSIS_CODES_MULTICLASS)
     SURVIVAL_ANALYSIS = (["event", "time"], PROGRESSION_STATUS)
 
     def __init__(self, target_labels: Sequence[str], target2code: Dict[str, np.ndarray]):
