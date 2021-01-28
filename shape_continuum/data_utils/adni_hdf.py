@@ -1,4 +1,6 @@
 import enum
+from functools import partial
+from operator import itemgetter
 from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import h5py
@@ -25,7 +27,7 @@ PROGRESSION_STATUS = {
 DataTransformFn = Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]
 TargetTransformFn = Callable[[str], np.ndarray]
 
-AddChannelDim = transforms.Lambda(lambda x: x[np.newaxis])
+AddChannelDim = transforms.Lambda(itemgetter(np.newaxis))
 NumpyToTensor = transforms.Lambda(torch.from_numpy)
 AsTensor = transforms.Lambda(torch.as_tensor)
 
@@ -279,6 +281,10 @@ def _minmax_rescaling(x: np.ndarray) -> np.ndarray:
     return (x - min_val) / (np.amax(x) - min_val)
 
 
+def _as_float32(x):
+    return x.astype(np.float32)
+
+
 def _get_image_dataset_transform(
     dtype: np.dtype,
     rescale: bool,
@@ -288,7 +294,7 @@ def _get_image_dataset_transform(
 ) -> Callable[[np.ndarray], np.ndarray]:
     img_transforms = []
 
-    img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+    img_transforms.append(transforms.Lambda(_as_float32))
 
     if rescale:
         max_val = np.array(np.iinfo(dtype).max, dtype=np.float32)
@@ -305,7 +311,7 @@ def _get_image_dataset_transform(
         img_transforms.append(transforms.Lambda(lambda x: (x - with_mean) / with_std))
 
     if len(img_transforms) == 0:
-        img_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+        img_transforms.append(transforms.Lambda(_as_float32))
 
     img_transforms.append(AddChannelDim)
     img_transforms.append(NumpyToTensor)
@@ -342,7 +348,7 @@ def _get_tabular_dataset_transform(
 
     tabular_transforms = []
 
-    tabular_transforms.append(transforms.Lambda(lambda x: x.astype(np.float32)))
+    tabular_transforms.append(transforms.Lambda(_as_float32))
 
     if transform_age:
         raise ValueError("transform_age not yet supported!")
@@ -358,7 +364,8 @@ def _get_tabular_dataset_transform(
         # find indices
         transform_feats = ["APOE4", "ABETA", "TAU", "PTAU", "FDG", "AV45"]
         indices = np.array([i for i, el in enumerate(feature_names) if el in transform_feats])
-        tabular_transforms.append(transforms.Lambda(lambda x: _transform_tabular(x, with_mean, with_std, indices)))
+        transform_fn = partial(_transform_tabular, with_mean=with_mean, with_std=with_std, indices=indices)
+        tabular_transforms.append(transforms.Lambda(transform_fn))
 
     tabular_transforms.append(NumpyToTensor)
 
