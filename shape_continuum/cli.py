@@ -57,10 +57,13 @@ def create_parser():
     parser.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
     # normalization
     parser.add_argument(
-        "--rescale_image",
+        "--normalize_image",
         choices=["rescale", "standardize", "minmax"],
         default="rescale",
-        help="normalization function to apply to image data. Default rescale. Option: rescale, standardize, minmax.",
+        help="Normalization function to apply to image data. Default rescale. Options: "
+        "rescale -> divide by maximum value of datatype; "
+        "standardize -> mean and stddev of whole dataset; "
+        "minmax -> normalize to [0..1] with minimum and maximum per sample.",
     )
     parser.add_argument(
         "--normalize_tabular",
@@ -280,9 +283,9 @@ class HeterogeneousModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        rescale = True if args.rescale_image == "rescale" else False
-        standardize = True if args.rescale_image == "standardize" else False
-        minmax = True if args.rescale_image == "minmax" else False
+        rescale = args.normalize_image == "rescale"
+        standardize = args.normalize_image == "standardize"
+        minmax = args.normalize_image == "minmax"
         train_data, transform_kwargs, transform_tabular_kwargs = adni_hdf.get_heterogeneous_dataset_for_train(
             args.train_data,
             self._task,
@@ -335,9 +338,9 @@ class ImageModelFactory(BaseModelFactory):
 
     def get_data(self):
         args = self.args
-        rescale = True if args.rescale_image == "rescale" else False
-        standardize = True if args.rescale_image == "standardize" else False
-        minmax = True if args.rescale_image == "minmax" else False
+        rescale = args.normalize_image == "rescale"
+        standardize = args.normalize_image == "standardize"
+        minmax = args.normalize_image == "minmax"
         train_data, transform_kwargs = adni_hdf.get_image_dataset_for_train(
             args.train_data, self._task, args.shape, rescale=rescale, standardize=standardize, minmax=minmax,
         )
