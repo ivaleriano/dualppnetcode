@@ -135,7 +135,7 @@ class BaseModelFactory(metaclass=ABCMeta):
             experiment = f"shape_{args.shape}_network_{args.discriminator_net}"
 
         experiment_dir = base_dir / experiment / timestamp
-        experiment_dir.mkdir(parents=True, exist_ok=True)
+        experiment_dir.mkdir(parents=True, exist_ok=False)
 
         checkpoints_dir = experiment_dir / "checkpoints"
         checkpoints_dir.mkdir(exist_ok=True)
