@@ -55,9 +55,10 @@ def create_parser():
     g = parser.add_argument_group("Logging")
     g.add_argument(
         "--experiment_name",
-        action="store_true",
-        default=False,
-        help="True if input a particular name for the experiment (default False: current date and time)",
+        nargs="?",
+        const=True,  # present, but not followed by a command-line argument
+        default=False,  # not present
+        help="Whether to give the experiment a particular name (default: current date and time).",
     )
     g.add_argument(
         "--tb_comment", action="store_true", default=False, help="any comment for storing on tensorboard",
@@ -126,7 +127,10 @@ class BaseModelFactory(metaclass=ABCMeta):
         args = self.args
         base_dir = Path(f"experiments_{args.task}")
         if args.experiment_name:
-            experiment = input("input a name for your experiment")
+            if isinstance(args.experiment_name, str):
+                experiment = args.experiment_name
+            else:
+                experiment = input("Enter a name for your experiment: ")
         else:
             experiment = f"shape_{args.shape}_network_{args.discriminator_net}"
 
