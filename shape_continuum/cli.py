@@ -350,6 +350,8 @@ class HeterogeneousModelFactory(BaseModelFactory):
             return vol_networks.ConcatHNN1FC(in_channels, n_outputs)
         elif args.discriminator_net == "concat2fc":
             return vol_networks.ConcatHNN2FC(in_channels, n_outputs)
+        elif args.discriminator_net == "mlpcatmlp":
+            return vol_networks.ConcatHNNMCM(in_channels, n_outputs)
         elif args.discriminator_net == "duanmu":
             return vol_networks.InteractiveHNN(in_channels, n_outputs)
         elif args.discriminator_net == "film":
