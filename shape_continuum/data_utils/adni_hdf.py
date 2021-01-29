@@ -1,6 +1,5 @@
 import enum
 from functools import partial
-from operator import itemgetter
 from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import h5py
@@ -27,9 +26,27 @@ PROGRESSION_STATUS = {
 DataTransformFn = Callable[[Union[np.ndarray, torch.Tensor]], Union[np.ndarray, torch.Tensor]]
 TargetTransformFn = Callable[[str], np.ndarray]
 
-AddChannelDim = transforms.Lambda(itemgetter(np.newaxis))
-NumpyToTensor = transforms.Lambda(torch.from_numpy)
-AsTensor = transforms.Lambda(torch.as_tensor)
+
+def AddChannelDim(img: np.ndarray) -> np.ndarray:
+    return img[np.newaxis]
+
+
+def NumpyToTensor(img: np.ndarray) -> torch.Tensor:
+    return torch.from_numpy(img)
+
+
+def AsTensor(img: np.ndarray) -> torch.Tensor:
+    return torch.as_tensor(img)
+
+
+def AsFloat32(img: np.ndarray) -> np.ndarray:
+    return img.astype(np.float32)
+
+
+def MinmaxRescaling(x: np.ndarray) -> np.ndarray:
+    min_val = x.min()
+
+    return (x - min_val) / (x.max() - min_val)
 
 
 class Task(enum.Enum):
@@ -275,16 +292,6 @@ class HDF5DatasetMesh(HDF5Dataset):
         return meta
 
 
-def _minmax_rescaling(x: np.ndarray) -> np.ndarray:
-    min_val = np.amin(x)
-
-    return (x - min_val) / (np.amax(x) - min_val)
-
-
-def _as_float32(x):
-    return x.astype(np.float32)
-
-
 def _get_image_dataset_transform(
     dtype: np.dtype,
     rescale: bool,
@@ -294,14 +301,14 @@ def _get_image_dataset_transform(
 ) -> Callable[[np.ndarray], np.ndarray]:
     img_transforms = []
 
-    img_transforms.append(transforms.Lambda(_as_float32))
+    img_transforms.append(AsFloat32)
 
     if rescale:
         max_val = np.array(np.iinfo(dtype).max, dtype=np.float32)
         img_transforms.append(transforms.Lambda(lambda x: x / max_val))
 
     if minmax_rescale:
-        img_transforms.append(transforms.Lambda(_minmax_rescaling))
+        img_transforms.append(MinmaxRescaling)
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
@@ -311,7 +318,7 @@ def _get_image_dataset_transform(
         img_transforms.append(transforms.Lambda(lambda x: (x - with_mean) / with_std))
 
     if len(img_transforms) == 0:
-        img_transforms.append(transforms.Lambda(_as_float32))
+        img_transforms.append(AsFloat32)
 
     img_transforms.append(AddChannelDim)
     img_transforms.append(NumpyToTensor)
@@ -348,7 +355,7 @@ def _get_tabular_dataset_transform(
 
     tabular_transforms = []
 
-    tabular_transforms.append(transforms.Lambda(_as_float32))
+    tabular_transforms.append(AsFloat32)
 
     if transform_age:
         raise ValueError("transform_age not yet supported!")
