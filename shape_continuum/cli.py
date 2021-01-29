@@ -1,5 +1,6 @@
 import argparse
 import json
+import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import partial
@@ -108,9 +109,16 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def __init__(self, arguments: argparse.Namespace) -> None:
         self.args = arguments
-
         if arguments.task == "clf":
-            self._task = adni_hdf.Task.CLASSIFICATION
+            if arguments.num_classes == 1:
+                warnings.warn(
+                    f"Data for classification tasks should consist of more than one label:"
+                    f" num_labels = {arguments.num_labels}."
+                )
+            if arguments.num_classes > 2:
+                self._task = adni_hdf.Task.MULTI_CLASSIFICATION
+            else:
+                self._task = adni_hdf.Task.BINARY_CLASSIFICATION
         elif arguments.task == "surv":
             assert arguments.num_classes == 1
             self._task = adni_hdf.Task.SURVIVAL_ANALYSIS
@@ -162,7 +170,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         """
         args = self.args
         if args.optimizer == "SGD":
-            optimizerD = torch.optim.SGD(params, lr=0.01, momentum=0.9)
+            optimizerD = torch.optim.SGD(params, lr=args.learning_rate, momentum=0.9)
         elif args.optimizer == "Adam":
             optimizerD = torch.optim.Adam(
                 params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
@@ -217,7 +225,7 @@ class BaseModelFactory(metaclass=ABCMeta):
                 CoxphLoss(), input_names=["logits", "event", "riskset"], output_names=["partial_log_lik"]
             )
         else:
-            if self.args.num_classes > 1:
+            if self.args.num_classes > 2:
                 loss = LossWrapper(
                     torch.nn.CrossEntropyLoss(), input_names=["logits", "target"], output_names=["cross_entropy"]
                 )
@@ -335,22 +343,23 @@ class HeterogeneousModelFactory(BaseModelFactory):
     def get_model(self):
         args = self.args
         in_channels = 1
+        n_outputs = args.num_classes if args.num_classes > 2 else 1
         if args.discriminator_net == "resnet":
-            return vol_networks.HeterogeneousResNet(in_channels, args.num_classes)
+            return vol_networks.HeterogeneousResNet(in_channels, n_outputs)
         elif args.discriminator_net == "concat1fc":
-            return vol_networks.ConcatHNN1FC(in_channels, args.num_classes)
+            return vol_networks.ConcatHNN1FC(in_channels, n_outputs)
         elif args.discriminator_net == "concat2fc":
-            return vol_networks.ConcatHNN2FC(in_channels, args.num_classes)
+            return vol_networks.ConcatHNN2FC(in_channels, n_outputs)
         elif args.discriminator_net == "duanmu":
-            return vol_networks.InteractiveHNN(in_channels, args.num_classes)
+            return vol_networks.InteractiveHNN(in_channels, n_outputs)
         elif args.discriminator_net == "film":
-            return vol_networks.FilmHNN(in_channels, args.num_classes)
+            return vol_networks.FilmHNN(in_channels, n_outputs)
         elif args.discriminator_net == "zecatnet":
-            return vol_networks.ZeCatNet(in_channels, args.num_classes)
+            return vol_networks.ZeCatNet(in_channels, n_outputs)
         elif args.discriminator_net == "zenullnet":
-            return vol_networks.ZeNullNet(in_channels, args.num_classes)
+            return vol_networks.ZeNullNet(in_channels, n_outputs)
         elif args.discriminator_net == "zenunet":
-            return vol_networks.ZeNuNet(in_channels, args.num_classes)
+            return vol_networks.ZeNuNet(in_channels, n_outputs)
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
@@ -378,10 +387,11 @@ class ImageModelFactory(BaseModelFactory):
     def get_model(self):
         args = self.args
         in_channels = 1
+        n_outputs = args.num_classes if args.num_classes > 2 else 1
         if args.discriminator_net == "resnet":
-            return vol_networks.ResNet(in_channels, args.num_classes)
+            return vol_networks.ResNet(in_channels, n_outputs)
         elif args.discriminator_net == "convnet":
-            return vol_networks.Vol_classifier(in_channels, args.num_classes)
+            return vol_networks.Vol_classifier(in_channels, n_outputs)
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
@@ -404,11 +414,12 @@ class PointCloudModelFactory(BaseModelFactory):
 
     def get_model(self):
         args = self.args
+        n_outputs = args.num_classes if args.num_classes > 2 else 1
         use_batch_norm = args.batchsize > 1
         if args.discriminator_net == "pointnet":
-            return point_networks.PointNet(args.num_points, args.num_classes, use_batch_norm)
+            return point_networks.PointNet(args.num_points, n_outputs, use_batch_norm)
         elif args.discriminator_net == "pointnet++":
-            return point_networks.PointNet2ClsSsg(args.num_classes)
+            return point_networks.PointNet2ClsSsg(n_outputs)
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
 
@@ -432,6 +443,7 @@ class MeshModelFactory(BaseModelFactory):
         args = self.args
         if args.discriminator_net == "spiralnet":
             in_channels = 3
+            n_outputs = args.num_classes if args.num_classes > 2 else 1
             seq_length = [9, 9]
             latent_channels = 32
             out_channels = [16, 16]
@@ -448,7 +460,7 @@ class MeshModelFactory(BaseModelFactory):
                 mesh_utils.to_sparse(down_transform).to(device) for down_transform in self.template["down_transform"]
             ]
             return mesh_networks.SpiralNet(
-                in_channels, out_channels, latent_channels, spiral_indices_list, down_transform_list, args.num_classes
+                in_channels, out_channels, latent_channels, spiral_indices_list, down_transform_list, n_outputs
             )
         else:
             raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
