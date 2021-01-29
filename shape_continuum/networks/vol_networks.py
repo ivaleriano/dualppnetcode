@@ -263,6 +263,7 @@ class ConcatHNNMCM(BaseModel):
         self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         self.mlp = nn.Linear(ndim_non_img, bottleneck_dim)
+        self.relu = nn.ReLU()
         self.fc = nn.Linear(8 * n_basefilters + bottleneck_dim, n_outputs)
 
     @property
@@ -283,6 +284,7 @@ class ConcatHNNMCM(BaseModel):
         out = self.global_pool(out)
         out = out.view(out.size(0), -1)
         tab_transformed = self.mlp(tabular)
+        tab_transformed = self.relu(tab_transformed)
         out = torch.cat((out, tab_transformed), dim=1)
         out = self.fc(out)
 
