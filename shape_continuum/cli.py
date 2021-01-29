@@ -91,10 +91,10 @@ class BaseModelFactory(metaclass=ABCMeta):
         self.args = arguments
 
         if arguments.task == "clf":
-            if arguments.num_classes <= 2:
-                self._task = adni_hdf.Task.CLASSIFICATION
-            else:
+            if arguments.num_classes > 1:
                 self._task = adni_hdf.Task.MULTI_CLASSIFICATION
+            else:
+                self._task = adni_hdf.Task.BINARY_CLASSIFICATION
         elif arguments.task == "surv":
             assert arguments.num_classes == 1
             self._task = adni_hdf.Task.SURVIVAL_ANALYSIS

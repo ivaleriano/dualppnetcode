@@ -12,7 +12,7 @@ from torchvision import transforms
 
 from ..data_processing import mesh_sampling
 
-DIAGNOSIS_CODES = {
+DIAGNOSIS_CODES_BINARY = {
     "CN": np.array(0, dtype=np.int64),
     "Dementia": np.array(1, dtype=np.int64),
 }
@@ -35,7 +35,7 @@ AsTensor = transforms.Lambda(torch.as_tensor)
 
 
 class Task(enum.Enum):
-    CLASSIFICATION = (["DX"], DIAGNOSIS_CODES)
+    BINARY_CLASSIFICATION = (["DX"], DIAGNOSIS_CODES_BINARY)
     MULTI_CLASSIFICATION = (["DX"], DIAGNOSIS_CODES_MULTICLASS)
     SURVIVAL_ANALYSIS = (["event", "time"], PROGRESSION_STATUS)
 
