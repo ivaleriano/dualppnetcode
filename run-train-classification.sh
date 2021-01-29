@@ -2,7 +2,7 @@
 set -uex
 
 # You should copy this data to you local SSD for speed
-DATA_DIR="/mnt/nas/Data_Neuro/shape_continuum/ADNI/fsl-fixbalance"
+DATA_DIR="/mnt/nas/Data_Neuro/shape_continuum/ADNI/classification-nomci/cv-matched/longitudinal/fsl"
 
 
 # CNN with volumes
@@ -17,7 +17,7 @@ python train.py \
     --task "clf" \
     --batchsize 64 \
     --epoch 15 \
-    --num_classes 3 \
+    --num_classes 1 \
     --tensorboard
 
 # Point Clouds
@@ -31,7 +31,7 @@ python train.py \
     --task "clf" \
     --batchsize 256 \
     --epoch 15 \
-    --num_classes 3 \
+    --num_classes 1 \
     --tensorboard
 
 # Meshes
@@ -45,5 +45,5 @@ python train.py \
     --task "clf" \
     --batchsize 64 \
     --epoch 15 \
-    --num_classes 3 \
+    --num_classes 1 \
     --tensorboard

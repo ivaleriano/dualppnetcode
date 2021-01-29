@@ -123,9 +123,10 @@ class ModelRunner:
         self.progressbar = progressbar
 
     def _dispatch(self, func: str, *args) -> None:
-        for h in self.hooks:
-            fn = getattr(h, func)
-            fn(*args)
+        with torch.no_grad():
+            for h in self.hooks:
+                fn = getattr(h, func)
+                fn(*args)
 
     def _batch_to_device(self, batch: Union[Tensor, Sequence[Tensor]]) -> Dict[str, Tensor]:
         if not isinstance(batch, (list, tuple)):
