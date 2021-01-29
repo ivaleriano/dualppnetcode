@@ -110,7 +110,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         self.args = arguments
 
         if arguments.task == "clf":
-            if arguments.num_classes > 1:
+            if arguments.num_classes > 2:
                 self._task = adni_hdf.Task.MULTI_CLASSIFICATION
             else:
                 self._task = adni_hdf.Task.BINARY_CLASSIFICATION
@@ -165,7 +165,7 @@ class BaseModelFactory(metaclass=ABCMeta):
         """
         args = self.args
         if args.optimizer == "SGD":
-            optimizerD = torch.optim.SGD(params, lr=0.01, momentum=0.9)
+            optimizerD = torch.optim.SGD(params, lr=args.learning_rate, momentum=0.9)
         elif args.optimizer == "Adam":
             optimizerD = torch.optim.Adam(
                 params, lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.decay_rate,
