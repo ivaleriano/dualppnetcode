@@ -20,43 +20,62 @@ from .training.wrappers import LossWrapper, NamedDataLoader, mesh_collate
 
 
 def create_parser():
-    parser = argparse.ArgumentParser("PointNet")
-    parser.add_argument("--batchsize", type=int, default=20, help="input batch size")
-    parser.add_argument("--workers", type=int, default=4, help="number of data loading workers")
-    parser.add_argument("--epoch", type=int, default=200, help="number of epochs for training")
-    parser.add_argument("--num_points", type=int, default=1500, help="number of epochs for training")
-    parser.add_argument("--pretrain", type=Path, help="whether use pretrain model")
-    parser.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
-    parser.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
-    parser.add_argument("--optimizer", choices=["Adam", "SGD", "AdamW"], default="Adam", help="type of optimizer")
-    parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
-    parser.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
-    parser.add_argument("--val_data", type=Path, required=True, help="path to validation dataset")
-    parser.add_argument("--test_data", type=Path, required=True, help="path to testing dataset")
-    parser.add_argument(
+    parser = argparse.ArgumentParser("Shape Continuum")
+
+    g = parser.add_argument_group("General")
+    g.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
+    g.add_argument("--workers", type=int, default=4, help="number of data loading workers")
+
+    g = parser.add_argument_group("Training")
+    g.add_argument("--epoch", type=int, default=200, help="number of epochs for training")
+    g.add_argument("--pretrain", type=Path, help="whether use pretrain model")
+    g.add_argument("--learning_rate", type=float, default=0.001, help="learning rate for training")
+    g.add_argument("--decay_rate", type=float, default=1e-4, help="weight decay")
+    g.add_argument("--optimizer", choices=["Adam", "SGD", "AdamW"], default="Adam", help="type of optimizer")
+
+    g = parser.add_argument_group("Architecture")
+    g.add_argument(
         "--discriminator_net", default="pointnet", help="which architecture to use for discriminator",
     )
-    parser.add_argument(
+    g.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
+
+    g = parser.add_argument_group("Data")
+    g.add_argument(
+        "--num_classes",
+        type=int,
+        default=3,
+        help="The number of output units of the network. For binary classification, 1, "
+        "for multi-class classification, the number of classes.",
+    )
+    g.add_argument(
         "--shape",
         default="pointcloud",
         help="which shape representation to use (pointcloud,mesh,mask,vol_with_bg,vol_without_bg)",
     )
-    parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
-    parser.add_argument(
+    g.add_argument("--batchsize", type=int, default=20, help="input batch size")
+    g.add_argument("--num_points", type=int, default=1500, help="number of points each point cloud has")
+    g.add_argument("--train_data", type=Path, required=True, help="path to training dataset")
+    g.add_argument("--val_data", type=Path, required=True, help="path to validation dataset")
+    g.add_argument("--test_data", type=Path, required=True, help="path to testing dataset")
+
+    g = parser.add_argument_group("Logging")
+    g.add_argument(
         "--experiment_name",
-        action="store_true",
-        default=False,
-        help="True if input a particular name for the experiment (default False: current date and time)",
+        nargs="?",
+        const=True,  # present, but not followed by a command-line argument
+        default=False,  # not present
+        help="Whether to give the experiment a particular name (default: current date and time).",
     )
-    parser.add_argument(
+    g.add_argument(
         "--tb_comment", action="store_true", default=False, help="any comment for storing on tensorboard",
     )
-    parser.add_argument(
+    g.add_argument(
         "--tensorboard", action="store_true", default=False, help="visualize training progress on tensorboard",
     )
-    parser.add_argument("--heterogeneous", action="store_true", default=False, help="training of a heterogeneous model")
+
     # normalization
-    parser.add_argument(
+    g = parser.add_argument_group("Data Normalization")
+    g.add_argument(
         "--normalize_image",
         choices=["rescale", "standardize", "minmax"],
         default="rescale",
@@ -65,7 +84,7 @@ def create_parser():
         "standardize -> mean and stddev of whole dataset; "
         "minmax -> normalize to [0..1] with minimum and maximum per sample.",
     )
-    parser.add_argument(
+    g.add_argument(
         "--normalize_tabular",
         action="store_true",
         default=False,
@@ -117,12 +136,15 @@ class BaseModelFactory(metaclass=ABCMeta):
         args = self.args
         base_dir = Path(f"experiments_{args.task}")
         if args.experiment_name:
-            experiment = input("input a name for your experiment")
+            if isinstance(args.experiment_name, str):
+                experiment = args.experiment_name
+            else:
+                experiment = input("Enter a name for your experiment: ")
         else:
             experiment = f"shape_{args.shape}_network_{args.discriminator_net}"
 
         experiment_dir = base_dir / experiment / timestamp
-        experiment_dir.mkdir(parents=True, exist_ok=True)
+        experiment_dir.mkdir(parents=True, exist_ok=False)
 
         checkpoints_dir = experiment_dir / "checkpoints"
         checkpoints_dir.mkdir(exist_ok=True)

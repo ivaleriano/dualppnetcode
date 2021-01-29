@@ -2,7 +2,7 @@
 set -uex
 
 # You should copy this data to you local SSD for speed
-DATA_DIR="/home/sebastian/workspace/adni-data-preprocessing/h5-data/adni-surv-matched/fsl"
+DATA_DIR="/mnt/nas/Data_Neuro/shape_continuum/ADNI/survival/cv-matched/fsl"
 
 # CNN with volumes
 # --shape can be on one of "mask", "vol_with_bg", "vol_without_bg"
