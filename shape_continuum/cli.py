@@ -112,8 +112,8 @@ class BaseModelFactory(metaclass=ABCMeta):
         if arguments.task == "clf":
             if arguments.num_classes == 1:
                 warnings.warn(
-                    f"Data for classification tasks should consist of more than one label:"
-                    f" num_labels = {arguments.num_labels}."
+                    "Data for classification tasks should consist of more than one label:"
+                    f" num_classes = {arguments.num_classes}."
                 )
             if arguments.num_classes > 2:
                 self._task = adni_hdf.Task.MULTI_CLASSIFICATION
