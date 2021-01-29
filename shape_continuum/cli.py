@@ -1,5 +1,6 @@
 import argparse
 import json
+import warnings
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import partial
@@ -108,8 +109,12 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def __init__(self, arguments: argparse.Namespace) -> None:
         self.args = arguments
-
         if arguments.task == "clf":
+            if arguments.num_classes == 1:
+                warnings.warn(
+                    f"Data for classification tasks should consist of more than one label:"
+                    f" num_labels = {arguments.num_labels}."
+                )
             if arguments.num_classes > 2:
                 self._task = adni_hdf.Task.MULTI_CLASSIFICATION
             else:
