@@ -1,33 +1,23 @@
-import argparse
-import os
+import pickle
 from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Iterator, Optional, Sequence, Tuple
 
 import pandas as pd
 import torch
 from torch import Tensor
-from torch.nn import Module
+from tqdm import tqdm
 
+from ..cli import BaseModelFactory
+from ..data_utils.adni_hdf import Task
 from ..models.base import BaseModel, check_is_unique
 from ..training.metrics import Metric
 from ..training.train_and_eval import ModelRunner
 from ..training.wrappers import DataLoaderWrapper
 
-"""
-TO DO:
-- (done) ModelEvaluator takes loader and model and concatenates all logits
-- (done) Save logits in a separate file and keep path of where it is it saved
-- (done) Use Metrics methods to compute the metrics
-- (done) Output all metrics in a dictionary
-- (done) Save csv with:
-    - argparser parameters
-    - metrics
-    - location of logits
 
-- Comment the code
-
-"""
+def concat_tensors_in_dict(data: Dict[Any, Sequence[Tensor]]) -> Dict[Any, Tensor]:
+    return {k: torch.cat(v, dim=0) for k, v in data.items()}
 
 
 class ModelTester(ModelRunner):
@@ -42,8 +32,6 @@ class ModelTester(ModelRunner):
         and `loss.input_names`.
       device (torch.device):
         Optional; Which device to run on.
-      hooks (list of Hook):
-        Optional; List of hooks to call during execution.
       progressbar (bool):
         Optional; Whether to display a progess bar.
     """
@@ -55,18 +43,18 @@ class ModelTester(ModelRunner):
         device: Optional[torch.device] = None,
         # hooks: Optional[Sequence[Hook]] = None,
         progressbar: bool = True,
-        task: str = "clf",
     ) -> None:
         super().__init__(
             model=model, data=data, device=device, progressbar=progressbar,
         )
         all_names = list(chain(model.input_names, model.output_names))
         check_is_unique(all_names)
-        self.task = task
 
         model_data_intersect = set(model.input_names).intersection(set(data.output_names))
         if len(model_data_intersect) == 0:
             raise ValueError("model inputs and data loader outputs do not agree")
+
+        self._collect_outputs = ("logits",)
 
     def _step_no_loss(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
         outputs = super()._step(batch)
@@ -79,76 +67,88 @@ class ModelTester(ModelRunner):
         with torch.no_grad():
             return self._step_no_loss(batch)
 
-    def _run(self) -> Dict[str, Tensor]:
-        """Execute model for every batch."""
+    def predict_iter(self) -> Iterator[Tuple[Dict[str, Tensor], Dict[str, Tensor]]]:
+        """Execute model for a single batch."""
         self._set_model_state()
 
-        logits = torch.Tensor().cuda()
-        targets = torch.LongTensor().cuda()
-        target_event = torch.ByteTensor().cuda()
-        target_time = torch.DoubleTensor().cuda()
-        # pbar = tqdm(self.data, total=len(self.data), disable=not self.progressbar)
-        for batch in self.data:
+        extra_inputs = set(self.data.output_names).difference(set(self.model.input_names))
+
+        pbar = tqdm(self.data, total=len(self.data), disable=not self.progressbar)
+        for batch in pbar:
             batch = self._batch_to_device(batch)
             outputs = self._step(batch)
-            logits = torch.cat([logits, outputs["logits"]], dim=0)
-            if self.task == "clf":
-                targets = torch.cat([targets, batch["target"]])
-            else:
-                target_event = torch.cat([target_event, batch["event"]])
-                target_time = torch.cat([target_time, batch["time"]])
+            predictions = {k: outputs[k].detach().cpu() for k in self._collect_outputs}
 
-            #     target_time = torch.cat([target_time,batch["target_time"]])
-            #     target_time = torch.cat([target_time, batch["target_event"]])
-        return {"logits": logits, "target": targets, "target_event": target_event, "target_time": target_time}
+            input_data = {k: batch[k].detach().cpu() for k in extra_inputs}
+
+            yield predictions, input_data
+
+    def predict_all(self) -> Tuple[Dict[str, Tensor], Dict[str, Tensor]]:
+        """Execute model for every batch."""
+        pred = {k: [] for k in self._collect_outputs}
+        unconsumed_inputs = {}
+        for p, ed in self.predict_iter():
+            for k, v in p.items():
+                pred[k].append(v)
+            for k, v in ed.items():
+                unconsumed_inputs.setdefault(k, []).append(v)
+
+        pred = concat_tensors_in_dict(pred)
+        unconsumed_inputs = concat_tensors_in_dict(unconsumed_inputs)
+
+        return pred, unconsumed_inputs
 
 
-def evaluate_model(
-    model: Module, DataLoader: DataLoaderWrapper, metrics: Sequence[Metric], task: str = "clf"
-) -> Sequence[Dict[str, Tensor]]:
-    tester = ModelTester(model=model, data=DataLoader, device=torch.device("cuda"), progressbar=True, task=task)
-    in_out_dict = tester._run()
+def evaluate_model(*, metrics: Sequence[Metric], **kwargs) -> Tuple[Dict[str, float], Dict[str, Tensor]]:
+    tester = ModelTester(**kwargs)
+    predictions, unconsumed_inputs = tester.predict_all()
+
     metrics_dict = {}
     for m in metrics:
         m.reset()
-        m.update(inputs=in_out_dict, outputs=in_out_dict)
-        for key, value in m.values().items():
-            metrics_dict[key] = value
-    return metrics_dict, in_out_dict
+        m.update(inputs=unconsumed_inputs, outputs=predictions)
+        metrics_dict.update(m.values())
+
+    predictions.update(unconsumed_inputs)
+    return metrics_dict, predictions
+
+
+def load_best_model(
+    factory: BaseModelFactory, checkpoints_dir: Path, device: Optional[torch.device] = None
+) -> torch.nn.Module:
+    """Load model from `best' checkpoint in the given dir."""
+    if factory.task in {Task.BINARY_CLASSIFICATION, Task.MULTI_CLASSIFICATION}:
+        metric = "balanced_accuracy"
+    elif factory.task == Task.SURVIVAL_ANALYSIS:
+        metric = "concordance_cindex"
+    else:
+        raise ValueError("task={!r} is not supported".format(factory.task))
+
+    best_net_path = checkpoints_dir / f"best_discriminator_{metric}.pth"
+    best_discriminator = factory.get_and_init_model()
+    best_discriminator.load_state_dict(torch.load(best_net_path, map_location=device))
+    best_discriminator = best_discriminator.to(device)
+
+    return best_discriminator
 
 
 def save_csv(
-    csv_dir: Path, params: Dict[Any, Any], out_metrics: Dict[str, Tensor], log_targ_metrics: Dict[str, Tensor]
+    csv_dir: Path, params: Dict[Any, Any], out_metrics: Dict[str, float], tensors: Dict[str, Tensor]
 ) -> Dict[str, Any]:
-    os.makedirs(csv_dir, exist_ok=True)
-    logits_path = csv_dir / "logits.csv"
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    logits_path = csv_dir / "logits.pkl"
     metrics_path = csv_dir / "metrics.csv"
 
-    df = pd.DataFrame([log_targ_metrics])
-    df.to_csv(logits_path)
-    saving_dict = {**params, **out_metrics}
-    saving_dict["logits_dir"] = logits_path
-    saving_dict["Name"] = saving_dict["discriminator_net"] + "-" + saving_dict["shape"]
-    df = pd.DataFrame([saving_dict])
+    arrays = {k: v.numpy() for k, v in tensors.items()}
+    with open(logits_path, "wb") as fout:
+        pickle.dump(arrays, fout, protocol=pickle.HIGHEST_PROTOCOL)
+
+    assert len(set(params.keys()).intersection(set(out_metrics.keys()))) == 0
+    saving_dict = {"logits_dir": str(logits_path.resolve())}
+    saving_dict.update(params)
+    saving_dict.update(out_metrics)
+    saving_dict["Name"] = "{}-{}".format(saving_dict["discriminator_net"], saving_dict["shape"])
+
+    df = pd.DataFrame.from_dict({k: [v] for k, v in saving_dict.items()}).sort_index(axis=1)
     df.to_csv(metrics_path, index=False)
     return saving_dict
-
-
-def create_parser():
-    parser = argparse.ArgumentParser("PointNet")
-    parser.add_argument("--batchsize", type=int, default=20, help="input batch size")
-    parser.add_argument("--workers", type=int, default=4, help="number of data loading workers")
-    parser.add_argument("--num_points", type=int, default=1500, help="number of epochs for training")
-    parser.add_argument("--task", choices=["clf", "surv"], default="clf", help="classification or survival analysis")
-    parser.add_argument("--test_data", type=Path, required=True, help="path to testing dataset")
-    parser.add_argument(
-        "--discriminator_net", default="pointnet", help="which architecture to use for discriminator",
-    )
-    parser.add_argument(
-        "--shape",
-        default="pointcloud",
-        help="which shape representation to use (pointcloud,mesh,mask,vol_with_bg,vol_without_bg",
-    )
-    parser.add_argument("--num_classes", type=int, default=3, help="number of classes")
-
-    return parser

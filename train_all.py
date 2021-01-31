@@ -5,9 +5,8 @@ import pandas as pd
 import torch
 
 from shape_continuum import cli
-from shape_continuum.testing.test_and_save import evaluate_model, save_csv
+from shape_continuum.testing.test_and_save import evaluate_model, load_best_model, save_csv
 from shape_continuum.training.hooks import CheckpointSaver, TensorBoardLogger
-from shape_continuum.training.metrics import Accuracy, BalancedAccuracy, ConcordanceIndex
 from shape_continuum.training.optim import ClippedStepLR
 from shape_continuum.training.train_and_eval import train_and_evaluate
 
@@ -24,6 +23,7 @@ def main(args=None):
             networks = ["spiralnet"]
         else:
             networks = ["convnet", "resnet"]
+
         for net in networks:
             args.shape = shape
             args.discriminator_net = net
@@ -54,6 +54,7 @@ def main(args=None):
                 )
             )
 
+            device = torch.device("cuda")
             train_and_evaluate(
                 model=discriminator,
                 loss=loss,
@@ -64,22 +65,18 @@ def main(args=None):
                 eval_data=valDataLoader,
                 train_hooks=train_hooks,
                 eval_hooks=eval_hooks,
-                device=torch.device("cuda"),
+                device=device,
             )
-            if args.task == "clf":
-                best_net_path = checkpoints_dir / "best_discriminator_balanced_accuracy.pth"
-            else:
-                best_net_path = checkpoints_dir / "best_discriminator_concordance_cindex.pth"
-            best_discriminator = factory.get_and_init_model()
-            best_discriminator.load_state_dict(torch.load(best_net_path))
-            best_discriminator.cuda()
-            param_dict = vars(args)
+
+            best_discriminator = load_best_model(factory, checkpoints_dir, device)
+
+            param_dict = factory.get_args()
             param_dict["num_parameters"] = cli.get_number_of_parameters(best_discriminator)
-            if args.task == "clf":
-                testMetrics = [Accuracy("logits", "target"), BalancedAccuracy(args.num_classes, "logits", "target")]
-            else:
-                testMetrics = [ConcordanceIndex("logits", "target_event", "target_time")]
-            metrics_dict, in_out_dict = evaluate_model(best_discriminator, testDataLoader, testMetrics, task=args.task)
+
+            testMetrics = factory.get_test_metrics()
+            metrics_dict, in_out_dict = evaluate_model(
+                model=best_discriminator, data=testDataLoader, metrics=testMetrics, device=device
+            )
             saving_dict = save_csv(experiment_dir / "csv", param_dict, metrics_dict, in_out_dict)
             complete_dicts.append(saving_dict)
 
