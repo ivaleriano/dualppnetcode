@@ -332,7 +332,7 @@ def _get_image_dataset_transform(
 
 
 def _get_target_transform(task: Task) -> TargetTransformFn:
-    if task == Task.CLASSIFICATION:
+    if task in {Task.BINARY_CLASSIFICATION, Task.MULTI_CLASSIFICATION}:
         target_transform = {"DX": transforms.Compose([task.label_transform, AsTensor])}
     elif task == Task.SURVIVAL_ANALYSIS:
         target_transform = dict(
