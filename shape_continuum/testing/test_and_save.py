@@ -67,6 +67,9 @@ class ModelTester(ModelRunner):
         with torch.no_grad():
             return self._step_no_loss(batch)
 
+    def _set_model_state(self):
+        self.model = self.model.eval()
+
     def predict_iter(self) -> Iterator[Tuple[Dict[str, Tensor], Dict[str, Tensor]]]:
         """Execute model for a single batch."""
         self._set_model_state()
