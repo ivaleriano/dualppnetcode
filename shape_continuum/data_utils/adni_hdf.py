@@ -376,12 +376,14 @@ def _get_tabular_dataset_transform(
             with_std = np.array(len(feature_names) * [1.0], dtype=np.float32)
         # save indices as key in dict with
         norms = {}
-        missing_codes = {"APOE4": "C(APOE4_MISSING)[T.1]",
-                           "ABETA": "C(ABETA_MISSING)[T.1]",
-                           "TAU": "C(TAU_MISSING)[T.1]",
-                           "PTAU": "C(PTAU_MISSING)[T.1]",
-                           "FDG": "C(FDG_MISSING)[T.1]",
-                           "AV45": "C(AV45_MISSING)[T.1]"}
+        missing_codes = {
+            "APOE4": "C(APOE4_MISSING)[T.1]",
+            "ABETA": "C(ABETA_MISSING)[T.1]",
+            "TAU": "C(TAU_MISSING)[T.1]",
+            "PTAU": "C(PTAU_MISSING)[T.1]",
+            "FDG": "C(FDG_MISSING)[T.1]",
+            "AV45": "C(AV45_MISSING)[T.1]",
+        }
         for i, el in enumerate(feature_names):
             if el in ["real_age", "PTEDUCAT"]:
                 norms[i] = (False, with_mean[i], with_std[i])
