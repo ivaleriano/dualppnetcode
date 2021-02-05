@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import json
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -359,8 +360,10 @@ class HeterogeneousModelFactory(BaseModelFactory):
             "in_channels": 1,
             "n_outputs": (args.num_classes if args.num_classes > 2 else 1),
         }
-        if args.discriminator_net != "resnet":
+        if "ndim_non_img" in list(inspect.signature(class_dict[args.discriminator_net]).parameters.keys()):
             model_args["ndim_non_img"] = self.tabular_size
+        elif "filmblock_args" in list(inspect.signature(class_dict[args.discriminator_net]).parameters.keys()):
+            model_args["filmblock_args"] = {"ndim_non_img": self.tabular_size}
         return class_dict[args.discriminator_net](**model_args)
 
 
