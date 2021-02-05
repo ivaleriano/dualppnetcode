@@ -70,6 +70,9 @@ class ModelTester(ModelRunner):
     def _set_model_state(self):
         self.model = self.model.eval()
 
+    def run(self):
+        raise NotImplementedError("run is not implemented. You probably want to use predict or predict_iter.")
+
     def predict_iter(self) -> Iterator[Tuple[Dict[str, Tensor], Dict[str, Tensor]]]:
         """Execute model for a single batch.
 
