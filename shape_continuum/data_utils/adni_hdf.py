@@ -355,9 +355,9 @@ class NormContainer:
 
 def _transform_tabular(x: np.ndarray, indices: List[NormContainer]) -> np.ndarray:
     # >0: Biomarkers that were not acquired at a visit are 0 and their 'missing' variable is 1 -> don't normalize
-    for index, values in indices.items():
-        if (not values[0]) or (x[index] > 0):
-            x[index] = (x[index] - values[1]) / values[2]
+    for feature_stats in indices:
+        if (not feature_stats.coded_as_missing) or (x[feature_stats.index] > 0):
+            x[feature_stats.index] = (x[feature_stats.index] - feature_stats.mean) / feature_stats.stddev
     return x
 
 

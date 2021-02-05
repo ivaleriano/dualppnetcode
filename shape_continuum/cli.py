@@ -360,7 +360,7 @@ class HeterogeneousModelFactory(BaseModelFactory):
             "n_outputs": (args.num_classes if args.num_classes > 2 else 1),
         }
         if args.discriminator_net != "resnet":
-            model_args = {"ndim_non_img": self.tabular_size}
+            model_args["ndim_non_img"] = self.tabular_size
         return class_dict[args.discriminator_net](**model_args)
 
 
