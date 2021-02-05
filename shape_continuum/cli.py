@@ -327,6 +327,7 @@ class HeterogeneousModelFactory(BaseModelFactory):
             transform_education=False,
             normalize_tabular=args.normalize_tabular,
         )
+        self.tabular_size = len(train_data.meta["tabular"]["columns"])
         trainDataLoader = self._make_named_data_loader(train_data, ["image", "tabular"], is_training=True)
 
         eval_data = adni_hdf.get_heterogeneous_dataset_for_eval(
@@ -342,28 +343,25 @@ class HeterogeneousModelFactory(BaseModelFactory):
 
     def get_model(self):
         args = self.args
-        in_channels = 1
-        n_outputs = args.num_classes if args.num_classes > 2 else 1
-        if args.discriminator_net == "resnet":
-            return vol_networks.HeterogeneousResNet(in_channels, n_outputs)
-        elif args.discriminator_net == "concat1fc":
-            return vol_networks.ConcatHNN1FC(in_channels, n_outputs)
-        elif args.discriminator_net == "concat2fc":
-            return vol_networks.ConcatHNN2FC(in_channels, n_outputs)
-        elif args.discriminator_net == "mlpcatmlp":
-            return vol_networks.ConcatHNNMCM(in_channels, n_outputs)
-        elif args.discriminator_net == "duanmu":
-            return vol_networks.InteractiveHNN(in_channels, n_outputs)
-        elif args.discriminator_net == "film":
-            return vol_networks.FilmHNN(in_channels, n_outputs)
-        elif args.discriminator_net == "zecatnet":
-            return vol_networks.ZeCatNet(in_channels, n_outputs)
-        elif args.discriminator_net == "zenullnet":
-            return vol_networks.ZeNullNet(in_channels, n_outputs)
-        elif args.discriminator_net == "zenunet":
-            return vol_networks.ZeNuNet(in_channels, n_outputs)
-        else:
-            raise ValueError("network {!r} is unsupported".format(args.discriminator_net))
+        class_dict = {
+            "resnet": vol_networks.HeterogeneousResNet,
+            "concat1fc": vol_networks.ConcatHNN1FC,
+            "concat2fc": vol_networks.ConcatHNN2FC,
+            "mlpcatmlp": vol_networks.ConcatHNNMCM,
+            "duanmu": vol_networks.InteractiveHNN,
+            "film": vol_networks.FilmHNN,
+            "zecatnet": vol_networks.ZeCatNet,
+            "zenullnet": vol_networks.ZeNullNet,
+            "zenunet": vol_networks.ZeNuNet,
+        }
+        assert args.discriminator_net in class_dict, "network {!r} is unsupported".format(args.discriminator_net)
+        model_args = {
+            "in_channels": 1,
+            "n_outputs": (args.num_classes if args.num_classes > 2 else 1),
+        }
+        if args.discriminator_net != "resnet":
+            model_args["ndim_non_img"] = self.tabular_size
+        return class_dict[args.discriminator_net](**model_args)
 
 
 class ImageModelFactory(BaseModelFactory):

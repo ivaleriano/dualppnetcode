@@ -1,6 +1,7 @@
 import enum
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -343,11 +344,22 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
     return target_transform
 
 
-def _transform_tabular(x: np.ndarray, with_mean: np.ndarray, with_std: np.ndarray, indices: np.array) -> np.ndarray:
+@dataclass
+class NormContainer:
+    name: str
+    index: int
+    mean: float
+    stddev: float
+    coded_as_missing: bool = False
+
+
+def _transform_tabular(x: np.ndarray, indices: List[NormContainer]) -> np.ndarray:
     # >0: Biomarkers that were not acquired at a visit are 0 and their 'missing' variable is 1 -> don't normalize
-    valid_indices = np.array([index for index in indices if x[index] > 0])
-    x[valid_indices] = (x[valid_indices] - with_mean[valid_indices]) / with_std[valid_indices]
-    return x
+    out = x.copy()
+    for feature_stats in indices:
+        if (not feature_stats.coded_as_missing) or (out[feature_stats.index] > 0):
+            out[feature_stats.index] = (out[feature_stats.index] - feature_stats.mean) / feature_stats.stddev
+    return out
 
 
 def _get_tabular_dataset_transform(
@@ -370,13 +382,24 @@ def _get_tabular_dataset_transform(
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
-            with_mean = np.array(0.0, dtype=np.float32)
+            with_mean = np.zeros(len(feature_names), dtype=np.float32)
         if with_std is None:
-            with_std = np.array(1.0, dtype=np.float32)
-        # find indices
-        transform_feats = ["APOE4", "ABETA", "TAU", "PTAU", "FDG", "AV45"]
-        indices = np.array([i for i, el in enumerate(feature_names) if el in transform_feats])
-        transform_fn = partial(_transform_tabular, with_mean=with_mean, with_std=with_std, indices=indices)
+            with_std = np.ones(len(feature_names), dtype=np.float32)
+        # save indices as key in dict with
+        norms = []
+        missing_codes = {
+            "APOE4": "C(APOE4_MISSING)[T.1]",
+            "ABETA": "C(ABETA_MISSING)[T.1]",
+            "TAU": "C(TAU_MISSING)[T.1]",
+            "PTAU": "C(PTAU_MISSING)[T.1]",
+            "FDG": "C(FDG_MISSING)[T.1]",
+            "AV45": "C(AV45_MISSING)[T.1]",
+        }
+        for i, el in enumerate(feature_names):
+            if "MISSING" not in el:  # normalize everything but 'MISSING' variables
+                as_missing = el in missing_codes and missing_codes[el] in feature_names
+                norms.append(NormContainer(el, i, with_mean[i], with_std[i], as_missing))
+        transform_fn = partial(_transform_tabular, indices=norms)
         tabular_transforms.append(transforms.Lambda(transform_fn))
 
     tabular_transforms.append(NumpyToTensor)
