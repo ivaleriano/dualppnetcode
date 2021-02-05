@@ -381,9 +381,9 @@ def _get_tabular_dataset_transform(
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
-            with_mean = np.zeros(feature_names, dtype=np.float32)
+            with_mean = np.zeros(len(feature_names), dtype=np.float32)
         if with_std is None:
-            with_std = np.ones(feature_names, dtype=np.float32)
+            with_std = np.ones(len(feature_names), dtype=np.float32)
         # save indices as key in dict with
         norms = []
         missing_codes = {
@@ -395,7 +395,7 @@ def _get_tabular_dataset_transform(
             "AV45": "C(AV45_MISSING)[T.1]",
         }
         for i, el in enumerate(feature_names):
-            if el in missing_codes.keys() and missing_codes[el] in feature_names:
+            if el in missing_codes and missing_codes[el] in feature_names:
                 norms.append(NormContainer(el, i, with_mean[i], with_std[i]), True)
             elif "MISSING" not in el:  # normalize everything but 'MISSING' variables
                 norms.append(NormContainer(el, i, with_mean[i], with_std[i]))
