@@ -395,10 +395,9 @@ def _get_tabular_dataset_transform(
             "AV45": "C(AV45_MISSING)[T.1]",
         }
         for i, el in enumerate(feature_names):
-            if el in missing_codes and missing_codes[el] in feature_names:
-                norms.append(NormContainer(el, i, with_mean[i], with_std[i]), True)
-            elif "MISSING" not in el:  # normalize everything but 'MISSING' variables
-                norms.append(NormContainer(el, i, with_mean[i], with_std[i]))
+            if "MISSING" not in el:  # normalize everything but 'MISSING' variables
+                as_missing = el in missing_codes and missing_codes[el] in feature_names
+                norms.append(NormContainer(el, i, with_mean[i], with_std[i], as_missing))
         transform_fn = partial(_transform_tabular, indices=norms)
         tabular_transforms.append(transforms.Lambda(transform_fn))
 
