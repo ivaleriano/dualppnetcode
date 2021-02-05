@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 import enum
 from functools import partial
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -343,13 +344,21 @@ def _get_target_transform(task: Task) -> TargetTransformFn:
     return target_transform
 
 
-def _transform_tabular(x: np.ndarray, indices: Dict[int, Tuple[bool, float, float]]) -> np.ndarray:
+@dataclass
+class NormContainer:
+    name: str
+    index: int
+    mean: float
+    stddev: float
+    coded_as_missing: bool = False
+
+
+def _transform_tabular(x: np.ndarray, indices: List[NormContainer]) -> np.ndarray:
     # >0: Biomarkers that were not acquired at a visit are 0 and their 'missing' variable is 1 -> don't normalize
     for index, values in indices.items():
         if (not values[0]) or (x[index] > 0):
             x[index] = (x[index] - values[1]) / values[2]
     return x
-
 
 def _get_tabular_dataset_transform(
     transform_age: bool,
@@ -371,11 +380,11 @@ def _get_tabular_dataset_transform(
 
     if with_mean is not None or with_std is not None:
         if with_mean is None:
-            with_mean = np.array(len(feature_names) * [0.0], dtype=np.float32)
+            with_mean = np.zeros(feature_names, dtype=np.float32)
         if with_std is None:
-            with_std = np.array(len(feature_names) * [1.0], dtype=np.float32)
+            with_std = np.ones(feature_names, dtype=np.float32)
         # save indices as key in dict with
-        norms = {}
+        norms = []
         missing_codes = {
             "APOE4": "C(APOE4_MISSING)[T.1]",
             "ABETA": "C(ABETA_MISSING)[T.1]",
@@ -385,10 +394,10 @@ def _get_tabular_dataset_transform(
             "AV45": "C(AV45_MISSING)[T.1]",
         }
         for i, el in enumerate(feature_names):
-            if el in ["real_age", "PTEDUCAT"]:
-                norms[i] = (False, with_mean[i], with_std[i])
-            elif el in missing_codes.keys():
-                norms[i] = (missing_codes[el] in feature_names, with_mean[i], with_std[i])
+            if el in missing_codes.keys() and missing_codes[el] in feature_names:
+                norms.append(NormContainer(el, i, with_mean[i], with_std[i]), True)
+            elif 'MISSING' not in el:  # normalize everything but 'MISSING' variables
+                norms.append(NormContainer(el, i, with_mean[i], with_std[i]))
         transform_fn = partial(_transform_tabular, indices=norms)
         tabular_transforms.append(transforms.Lambda(transform_fn))
 
