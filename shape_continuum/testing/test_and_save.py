@@ -71,7 +71,13 @@ class ModelTester(ModelRunner):
         self.model = self.model.eval()
 
     def predict_iter(self) -> Iterator[Tuple[Dict[str, Tensor], Dict[str, Tensor]]]:
-        """Execute model for a single batch."""
+        """Execute model for a single batch.
+
+        Yields:
+            Two dicts. The first one contains the model's outputs,
+            the second one the data loader's outputs that have not
+            been consumed by the model, typically the true label.
+        """
         self._set_model_state()
 
         extra_inputs = set(self.data.output_names).difference(set(self.model.input_names))
@@ -87,7 +93,13 @@ class ModelTester(ModelRunner):
             yield predictions, input_data
 
     def predict_all(self) -> Tuple[Dict[str, Tensor], Dict[str, Tensor]]:
-        """Execute model for every batch."""
+        """Execute model for every batch and concatenate the outputs.
+
+        Returns:
+            Two dicts. The first one contains the model's outputs,
+            the second one the data loader's outputs that have not
+            been consumed by the model, typically the true label.
+        """
         pred = {k: [] for k in self._collect_outputs}
         unconsumed_inputs = {}
         for p, ed in self.predict_iter():
@@ -103,6 +115,27 @@ class ModelTester(ModelRunner):
 
 
 def evaluate_model(*, metrics: Sequence[Metric], **kwargs) -> Tuple[Dict[str, float], Dict[str, Tensor]]:
+    """Obtain predictions from model and evaluate its performance.
+
+    Args:
+      metrics (list):
+        List of metrics to compute on test data
+      model (BaseModel):
+        Instance of model to call.
+      data (DataLoaderWrapper):
+        Instance of DataLoader to obtain batches from.
+        Keys of `data.output_names` must be contained in keys of `model.input_names`
+        and `loss.input_names`.
+      device (torch.device):
+        Optional; Which device to run on.
+      progressbar (bool):
+        Optional; Whether to display a progess bar.
+
+    Returns:
+        Two dicts. The first dict contains the computed metrics
+        on the entire data. The second dict contains the model's raw
+        output for each data point.
+    """
     tester = ModelTester(**kwargs)
     predictions, unconsumed_inputs = tester.predict_all()
 
@@ -119,7 +152,21 @@ def evaluate_model(*, metrics: Sequence[Metric], **kwargs) -> Tuple[Dict[str, fl
 def load_best_model(
     factory: BaseModelFactory, checkpoints_dir: Path, device: Optional[torch.device] = None
 ) -> torch.nn.Module:
-    """Load model from `best' checkpoint in the given dir."""
+    """Load model from `best' checkpoint in the given dir.
+
+    The checkpoint to restore depends on the value of ``factory.task``.
+
+    Args:
+      factory (BaseModelFactory):
+        Factory used to create model instance.
+      checkpoints_dir (Path):
+        Directory to search for checkpoints.
+      device (torch.device):
+        Optional; The device the model should be associated with.
+
+    Returns:
+        torch.nn.Module: The model with weights restored from the `best' checkpoint.
+    """
     if factory.task in {Task.BINARY_CLASSIFICATION, Task.MULTI_CLASSIFICATION}:
         metric = "balanced_accuracy"
     elif factory.task == Task.SURVIVAL_ANALYSIS:
@@ -136,8 +183,26 @@ def load_best_model(
 
 
 def save_csv(
-    csv_dir: Path, params: Dict[Any, Any], out_metrics: Dict[str, float], tensors: Dict[str, Tensor]
+    csv_dir: Path, params: Dict[str, Any], out_metrics: Dict[str, float], tensors: Dict[str, Tensor]
 ) -> Dict[str, Any]:
+    """Write parameters, metrics and tensors to disk.
+
+    Args:
+      csv_dir (Path):
+        Path to directory where outputs will be written to. Will be created
+        if it does not exist.
+      params (dict):
+        Meta-information, such as hyper-parameters, that will be saved
+        together with metrics in a ``metrics.csv`` file.
+      out_metrics (dict):
+        Name and value of metrics to save.
+      tensors (dict):
+        Tensors to save in ``logits.pkl``. Torch tensors will be concerted
+        to numpy arrays before pickling.
+
+    Returns:
+      dict: Values written to ``metrics.csv`` file.
+    """
     csv_dir.mkdir(parents=True, exist_ok=True)
     logits_path = csv_dir / "logits.pkl"
     metrics_path = csv_dir / "metrics.csv"
