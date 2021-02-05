@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import enum
+from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
@@ -360,6 +360,7 @@ def _transform_tabular(x: np.ndarray, indices: List[NormContainer]) -> np.ndarra
             x[index] = (x[index] - values[1]) / values[2]
     return x
 
+
 def _get_tabular_dataset_transform(
     transform_age: bool,
     transform_education: bool,
@@ -396,7 +397,7 @@ def _get_tabular_dataset_transform(
         for i, el in enumerate(feature_names):
             if el in missing_codes.keys() and missing_codes[el] in feature_names:
                 norms.append(NormContainer(el, i, with_mean[i], with_std[i]), True)
-            elif 'MISSING' not in el:  # normalize everything but 'MISSING' variables
+            elif "MISSING" not in el:  # normalize everything but 'MISSING' variables
                 norms.append(NormContainer(el, i, with_mean[i], with_std[i]))
         transform_fn = partial(_transform_tabular, indices=norms)
         tabular_transforms.append(transforms.Lambda(transform_fn))
