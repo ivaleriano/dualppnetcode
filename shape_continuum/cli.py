@@ -360,11 +360,14 @@ class HeterogeneousModelFactory(BaseModelFactory):
             "in_channels": 1,
             "n_outputs": (args.num_classes if args.num_classes > 2 else 1),
         }
-        if "ndim_non_img" in list(inspect.signature(class_dict[args.discriminator_net]).parameters.keys()):
+
+        cls = class_dict[args.discriminator_net]
+        class_params = set(inspect.signature(cls).parameters.keys())
+        if "ndim_non_img" in class_params:
             model_args["ndim_non_img"] = self.tabular_size
-        elif "filmblock_args" in list(inspect.signature(class_dict[args.discriminator_net]).parameters.keys()):
+        elif "filmblock_args" in class_params:
             model_args["filmblock_args"] = {"ndim_non_img": self.tabular_size}
-        return class_dict[args.discriminator_net](**model_args)
+        return cls(**model_args)
 
 
 class ImageModelFactory(BaseModelFactory):
