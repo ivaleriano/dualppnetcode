@@ -202,6 +202,7 @@ class ConcatHNN2FC(BaseModel):
         bn_momentum: float = 0.1,
         n_basefilters: int = 8,
         ndim_non_img: int = 14,
+        bottleneck_dim: int = 12,
     ):
 
         super().__init__()
@@ -213,10 +214,10 @@ class ConcatHNN2FC(BaseModel):
         self.block4 = ResBlock(4 * n_basefilters, 8 * n_basefilters, bn_momentum=bn_momentum, stride=2)  # 4
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         layers = [
-            ("fc1", nn.Linear(8 * n_basefilters + ndim_non_img, 12)),
+            ("fc1", nn.Linear(8 * n_basefilters + ndim_non_img, bottleneck_dim)),
             # ("dropout", nn.Dropout(p=0.5, inplace=True)),
             ("relu", nn.ReLU()),
-            ("fc2", nn.Linear(12, n_outputs)),
+            ("fc2", nn.Linear(bottleneck_dim, n_outputs)),
         ]
         self.fc = nn.Sequential(OrderedDict(layers))
 
