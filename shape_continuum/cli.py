@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Any, Dict, Sequence, Tuple
 
 import torch
 from torch.optim.optimizer import Optimizer
@@ -126,6 +126,10 @@ class BaseModelFactory(metaclass=ABCMeta):
         else:
             raise ValueError("task={!r} is not supported".format(arguments.task))
 
+    @property
+    def task(self) -> adni_hdf.Task:
+        return self._task
+
     def make_directories(self) -> Tuple[str, str, str]:
         """"Create directories to hold logs and checkpoints.
 
@@ -184,6 +188,14 @@ class BaseModelFactory(metaclass=ABCMeta):
             raise ValueError(f"unknown optimizer {args.optimizer}")
         return optimizerD
 
+    def get_args(self) -> Dict[str, Any]:
+        """Return arguments as dictionary."""
+        args = vars(self.args)
+        for k, v in args.items():
+            if isinstance(v, Path):
+                args[k] = str(v.resolve())
+        return args
+
     def write_args(self, filename: str) -> None:
         """Write command line arguments to JSON file.
 
@@ -191,10 +203,7 @@ class BaseModelFactory(metaclass=ABCMeta):
           filename (str):
             Path to JSON file.
         """
-        args = vars(self.args)
-        for k, v in args.items():
-            if isinstance(v, Path):
-                args[k] = str(v.resolve())
+        args = self.get_args()
 
         with open(filename, "w") as f:
             json.dump(args, f, indent=2)
@@ -241,14 +250,20 @@ class BaseModelFactory(metaclass=ABCMeta):
 
     def get_metrics(self) -> Sequence[Metric]:
         """Returns a list of metrics to compute."""
-        args = self.args
         if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
-            metrics = [Mean("partial_log_lik"), ConcordanceIndex("logits", "event", "time")]
+            metrics = [Mean("partial_log_lik")]
+        else:
+            metrics = [Mean("cross_entropy")]
+        metrics.extend(self.get_test_metrics())
+        return metrics
+
+    def get_test_metrics(self) -> Sequence[Metric]:
+        if self._task == adni_hdf.Task.SURVIVAL_ANALYSIS:
+            metrics = [ConcordanceIndex("logits", "event", "time")]
         else:
             metrics = [
-                Mean("cross_entropy"),
                 Accuracy("logits", "target"),
-                BalancedAccuracy(args.num_classes, "logits", "target"),
+                BalancedAccuracy(self.args.num_classes, "logits", "target"),
             ]
         return metrics
 
