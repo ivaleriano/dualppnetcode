@@ -309,15 +309,15 @@ class FilmBase(nn.Module, metaclass=ABCMeta):
             )
         # ResBlock
         self.conv1 = conv3d(in_channels, out_channels, stride=stride)
-        self.bn1 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+        self.bn1 = nn.BatchNorm3d(out_channels, momentum=bn_momentum, affine=(location != 4))
         self.conv2 = conv3d(out_channels, out_channels)
-        self.bn2 = nn.BatchNorm3d(out_channels, momentum=bn_momentum)
+        self.bn2 = nn.BatchNorm3d(out_channels, momentum=bn_momentum, affine=(location != 6))
         self.relu = nn.ReLU(inplace=True)
         self.global_pool = nn.AdaptiveAvgPool3d(1)
         if stride != 1 or in_channels != out_channels:
             self.downsample = nn.Sequential(
                 conv3d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm3d(out_channels, momentum=bn_momentum),
+                nn.BatchNorm3d(out_channels, momentum=bn_momentum, affine=(location != 2)),
             )
         else:
             self.downsample = None
