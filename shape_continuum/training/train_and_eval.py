@@ -86,6 +86,8 @@ def train_and_evaluate(
             evaluator.run()
         if scheduler is not None:
             scheduler.step()
+    trainer.shutdown()
+    evaluator.shutdown()
 
 
 class ModelRunner:
@@ -183,6 +185,10 @@ class ModelRunner:
         )
 
         return out_tensors
+
+    def shutdown(self) -> None:
+        """Shutdown function"""
+        self._dispatch("end")
 
 
 class ModelEvaluator(ModelRunner):
