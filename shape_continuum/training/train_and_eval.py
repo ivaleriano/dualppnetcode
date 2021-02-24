@@ -188,7 +188,7 @@ class ModelRunner:
 
     def shutdown(self) -> None:
         """Shutdown function"""
-        self._dispatch("after_training")
+        self._dispatch("end")
 
 
 class ModelEvaluator(ModelRunner):

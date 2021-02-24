@@ -20,8 +20,8 @@ class Hook:
     def on_end_epoch(self) -> None:
         """Called after the data has been fully consumed."""
 
-    def after_training(self) -> None:
-        """Called after the training has succesfully finished."""
+    def end(self) -> None:
+        """Called at the end of execution, e.g. when the last epoch has been completed."""
 
     def before_step(self, inputs: Dict[str, Tensor]) -> None:
         """Called before the model is evaluated on a batch.
@@ -99,7 +99,7 @@ class CheckpointSaver(Hook):
         if self._metrics is not None:
             self._save_best_models()
 
-    def after_training(self) -> None:
+    def end(self) -> None:
         if self._epoch % self._save_every_n_epochs != 0:
             ckpt_path = self._save()
             if self._max_keep is not None:
