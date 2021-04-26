@@ -1,10 +1,27 @@
+"""
+For FSL run:
+```
+python view-shapes.py \
+    /mnt/nas/Data_Neuro/ADNI3/FSL/FSL_out/1012942/1012942_all_fast_firstseg.nii.gz \
+    -m /mnt/nas/Data_Neuro/ADNI3/FSL/FSL_out/1012942/1012942-L_Hipp_first.vtk \
+    --volume-as-surface
+```
+
+For FreeSurfer run:
+```
+python view-shapes.py \
+    /mnt/nas/Data_Neuro/ADNI2/standardized/1012942/mri/aseg_wimt.mgz \
+    --volume-as-surface
+´``
+"""
 import argparse
 import tempfile
-from typing import Tuple
 from pathlib import Path
-import vtk
+from typing import Tuple
+
 import nibabel as nib
 import numpy as np
+import vtk
 
 COLOR_PALETTE = (
     # np.array([0.0, 0.0, 0.0]),
