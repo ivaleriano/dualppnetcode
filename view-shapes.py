@@ -321,6 +321,28 @@ def create_volume_renderer_from_label_map(label_map: vtk.vtkImageData, color: Tu
     return volume
 
 
+def save_screnshot(renWin):
+    w2if = vtk.vtkWindowToImageFilter()
+    w2if.SetInput(renWin)
+    # also record the alpha (transparency) channel
+    w2if.SetInputBufferTypeToRGB()
+    # read from the back buffer
+    w2if.ReadFrontBufferOff()
+    w2if.Update()
+
+    writer = vtk.vtkPNGWriter()
+    print("Saving screenshot.png")
+    writer.SetFileName('screenshot.png')
+    writer.SetInputConnection(w2if.GetOutputPort())
+    writer.Write()
+
+
+def KeypressCallbackFunction(caller, eventId):
+    if caller.GetKeySym() == "B":  # Shift + b
+        renWin = caller.GetRenderWindow()
+        save_screnshot(renWin)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", type=Path, help="Path to FreeSurfer (*.mgz) or FSL segementation map (*.nii.gz).")
@@ -371,6 +393,7 @@ def main():
     # Create interactor
     iren = vtk.vtkRenderWindowInteractor()
     iren.SetRenderWindow(renWin)
+    iren.AddObserver("KeyPressEvent", KeypressCallbackFunction)
 
     # create volume renderer
     if args.volume_as_surface:
