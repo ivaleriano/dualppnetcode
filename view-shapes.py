@@ -237,7 +237,8 @@ def create_mesh_actor(
     meshActor.GetProperty().SetColor(color)
     meshActor.GetProperty().SetInterpolationToFlat()
     if respresentation == "wireframe":
-        # meshActor.GetProperty().SetRepresentationToWireframe()
+        meshActor.GetProperty().SetRepresentationToSurface()
+        meshActor.GetProperty().SetColor(1.0, 1.0, 1.0)
 
         # from https://kitware.github.io/vtk-examples/site/Python/Modelling/DelaunayMesh/
         extract = vtk.vtkExtractEdges()
@@ -275,7 +276,7 @@ def create_mesh_actor(
         ballActor.GetProperty().SetAmbient(0.2)
         ballActor.GetProperty().SetDiffuse(0.8)
 
-        meshActor = [edgeActor, ballActor]
+        meshActor = [meshActor, edgeActor, ballActor]
     elif respresentation == "points":
         meshActor.GetProperty().SetRepresentationToPoints()
         meshActor.GetProperty().RenderPointsAsSpheresOn()
