@@ -22,6 +22,8 @@ from typing import Tuple
 import nibabel as nib
 import numpy as np
 import vtk
+from vtk.util.numpy_support import vtk_to_numpy
+from vtk.numpy_interface import dataset_adapter as dsa
 
 COLOR_PALETTE = (
     # np.array([0.0, 0.0, 0.0]),
@@ -208,11 +210,16 @@ def load_fsl_mesh(filename):
     # https://git.fmrib.ox.ac.uk/fsl/fsleyes/fsleyes/-/blob/190a18aecf1edca9354e61f9cf8f39e028864fb9/fsleyes/tests/__init__.py#L670
     translation = vtk.vtkTransform()
     translation.SetMatrix(
+        # These values come from _to_std_sub.mat
         [
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, -1, 255,  # flip axis
-            0, 0, 0, 1,
+            # 1, 0, 0, 0,
+            # 0, 1, 0, 0,
+            # 0, 0, -1, 255,  # flip axis
+            # 0, 0, 0, 1,
+            1.014524565,  0.04805901348,  -0.006983089147,  -45.73854284,
+            -0.04410334927,  1.076904918,  0.09135451078,  -29.09105911,
+            0.009790349515,  -0.08129627403,  1.182395352,  -89.75581615,
+            0,  0,  0,  1,
         ]
     )
 
@@ -221,7 +228,22 @@ def load_fsl_mesh(filename):
     transformFilter.SetTransform(translation)
     transformFilter.Update()
 
-    return transformFilter.GetOutput()
+    translation = vtk.vtkTransform()
+    translation.SetMatrix(
+        [
+            -1, 0, 0, 255 - 64,  # flip axis, and adjust offset (by trial and error)
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        ]
+    )
+
+    transformFilter2 = vtk.vtkTransformPolyDataFilter()
+    transformFilter2.SetInputConnection(transformFilter.GetOutputPort())
+    transformFilter2.SetTransform(translation)
+    transformFilter2.Update()
+
+    return transformFilter2.GetOutput()
 
 
 def create_mesh_actor(
@@ -321,6 +343,42 @@ def create_volume_renderer_from_label_map(label_map: vtk.vtkImageData, color: Tu
     return volume
 
 
+def create_volume_renderer_from_mri(label_map: vtk.vtkImageData, opacity: float) -> vtk.vtkVolume:
+    # The following class is used to store transparencyv-values for later retrival.
+    # In our case, we want the value 0 to be completly opaque
+    alphaChannelFunc = vtk.vtkPiecewiseFunction()
+    alphaChannelFunc.AddPoint(0, 0.0)
+
+    data = vtk_to_numpy(label_map.GetPointData().GetScalars())
+    amax = np.max(data)
+    alphaChannelFunc.AddPoint(amax, opacity)
+
+    # This class stores color data and can create color tables from a few color points.
+    colorFunc = vtk.vtkColorTransferFunction()
+    colorFunc.AddRGBPoint(0, 0.0, 0.0, 0.0)
+    colorFunc.AddRGBPoint(amax, 1.0, 1.0, 1.0)
+
+    # The property describes how the data will look.
+    volumeProperty = vtk.vtkVolumeProperty()
+    volumeProperty.SetColor(colorFunc)
+    volumeProperty.SetScalarOpacity(alphaChannelFunc)
+    volumeProperty.ShadeOff()
+    volumeProperty.SetInterpolationTypeToLinear()
+
+    # The mapper / ray cast function know how to render the data
+    volumeMapper = vtk.vtkGPUVolumeRayCastMapper()
+    volumeMapper.SetBlendModeToComposite()
+    volumeMapper.SetInputData(label_map)
+
+    # The volume holds the mapper and the property and
+    # can be used to position/orient the volume
+    volume = vtk.vtkVolume()
+    volume.SetMapper(volumeMapper)
+    volume.SetProperty(volumeProperty)
+
+    return volume
+
+
 def save_screnshot(renWin):
     w2if = vtk.vtkWindowToImageFilter()
     w2if.SetInput(renWin)
@@ -348,9 +406,11 @@ def main():
     parser.add_argument("filename", type=Path, help="Path to FreeSurfer (*.mgz) or FSL segementation map (*.nii.gz).")
     parser.add_argument("-l", "--label", type=int, default=17, help="Label of structure to extract.")
     parser.add_argument("-m", "--mesh", type=Path, help="Path to FSL mesh (*.vtk).")
-    parser.add_argument(
-        "--volume-as-surface", action="store_true", default=False,
-        help="Whether to render volumetric mask as surface mesh."
+    parser.add_argument("--mri", type=Path, help="Path to MRI scan (transformWarped_converted.nii.gz).")
+    parser.add_argument("--render-mri-as",
+        choices=["volume", "texture", "mask", "surface", "texture+surface"], default="volume",
+        help="Whether render the entire ROI, only the hippocampus inside the ROI, "
+             "only the volumetric binary hippocampus mask, or the binary mask as surface mesh."
     )
 
     args = parser.parse_args()
@@ -362,16 +422,53 @@ def main():
     else:
         seg_mesh = mesh_from_segmentation_map(label_map, smoothing=True)
 
+    if args.mri:
+        filename = args.mri
+        if filename.suffix == ".mgz":
+            reader, _ = load_mgz(filename)
+        else:
+            reader, _ = load_nifti(filename)
+
+        mri_scan = reader.GetOutput()
+        # print(mri_scan.GetExtent(), mri_scan.GetBounds(), mri_scan.GetOrigin())
+
+        margin = 32
+        extractVOI = vtk.vtkExtractVOI()
+        extractVOI.SetInputData(mri_scan)
+        # Center of bounding box around left Hippocampus
+        extractVOI.SetVOI(
+            69 - margin, 69 + margin,
+            108 - margin, 108 + margin,
+            64 - margin, 64 + margin,
+        )
+        extractVOI.Update()
+
+        if "texture" in args.render_mri_as:
+            mri_data = dsa.WrapDataObject(mri_scan).PointData[0]
+            label_map_data = dsa.WrapDataObject(label_map).PointData[0]
+            mri_data[label_map_data == 0] = 0
+
+            extractVOI = vtk.vtkExtractVOI()
+            extractVOI.SetInputData(mri_scan)
+            extractVOI.Update()
+        mri_texture = extractVOI.GetOutput()
+
+        # w = vtk.vtkNIFTIImageWriter()
+        # w.SetInputData(mri_texture)
+        # w.SetFileName("vol.nii.gz")
+        # w.Write()
+
     colors = vtk.vtkNamedColors()
 
     # Create a renderer for each view
     rens = [vtk.vtkRenderer(), vtk.vtkRenderer(), vtk.vtkRenderer()]
-    for r in rens:
+    if args.render_mri_as == "texture+surface":
+        rens.append(vtk.vtkRenderer())
+    offset = 1.0 / len(rens)
+    for i, r in enumerate(rens):
         # r.SetBackground(0.8, 0.8, 0.8)
         r.SetBackground(1.0, 1.0, 1.0)
-    rens[0].SetViewport(0, 0, 1.0 / 3.0, 1)
-    rens[1].SetViewport(1.0 / 3.0, 0, 2.0 / 3.0, 1)
-    rens[2].SetViewport(2.0 / 3.0, 0, 1, 1)
+        r.SetViewport(i * offset, 0, (i + 1) * offset, 1)
 
     # An outline provides context around the data.
     outlineData = vtk.vtkOutlineFilter()
@@ -396,12 +493,26 @@ def main():
     iren.AddObserver("KeyPressEvent", KeypressCallbackFunction)
 
     # create volume renderer
-    if args.volume_as_surface:
+    num_volumes = 1
+    if args.render_mri_as == "surface":
         meshActor = create_mesh_actor(vol_mesh, COLOR_PALETTE[0], "surface")
         rens[0].AddActor(meshActor)
-    else:
+    elif args.render_mri_as == "mask":
         volume = create_volume_renderer_from_label_map(label_map, COLOR_PALETTE[0])
         rens[0].AddVolume(volume)
+    elif args.render_mri_as in ("volume", "texture",):
+        volume = create_volume_renderer_from_mri(mri_texture, opacity=0.8)
+        rens[0].AddVolume(volume)
+    elif args.render_mri_as == "texture+surface":
+        volume = create_volume_renderer_from_mri(mri_texture, opacity=0.8)
+        rens[0].AddVolume(volume)
+
+        meshActor = create_mesh_actor(vol_mesh, COLOR_PALETTE[0], "surface")
+        rens[1].AddActor(meshActor)
+        rens[1].SetActiveCamera(aCamera)
+        renWin.AddRenderer(rens[1])
+
+        num_volumes = 2
 
     rens[0].SetActiveCamera(aCamera)
     renWin.AddRenderer(rens[0])
@@ -415,8 +526,8 @@ def main():
     widget.SetEnabled(1)
     widget.InteractiveOn()
 
-    for i, rep in enumerate(("wireframe", "points"), start=1):
-        meshActor = create_mesh_actor(seg_mesh, COLOR_PALETTE[i], rep)
+    for i, (rep, col) in enumerate(zip(("wireframe", "points"), COLOR_PALETTE[1:]), start=num_volumes):
+        meshActor = create_mesh_actor(seg_mesh, col, rep)
         if isinstance(meshActor, list):
             for m in meshActor:
                 rens[i].AddActor(m)
@@ -425,10 +536,15 @@ def main():
         rens[i].SetActiveCamera(aCamera)
         renWin.AddRenderer(rens[i])
 
-    renWin.SetSize(1800, 600)
+    renWin.SetSize(1600, 600)
 
-    rens[0].ResetCamera()
-    aCamera = rens[0].GetActiveCamera()
+    if "texture" in args.render_mri_as:
+        aRen = rens[-1]
+    else:
+        aRen = rens[0]
+
+    aRen.ResetCamera()
+    aCamera = aRen.GetActiveCamera()
     aCamera.SetViewUp(0, 0, 1)
     aCamera.SetPosition(0, -1, 0)
     aCamera.SetFocalPoint(0, 0, 0)
@@ -446,13 +562,16 @@ def main():
 
     renWin.AddObserver("AbortCheckEvent", CheckAbort)
 
-    rens[0].ResetCamera()
+    aRen.ResetCamera()
     # Actors are added to the renderer. An initial camera view is created.
     # The Dolly() method moves the camera towards the FocalPoint,
     # thereby enlarging the image.
-    aCamera.Dolly(7.0)
+    if args.render_mri_as == "volume":
+        aCamera.Dolly(1.15)
+    else:
+        aCamera.Dolly(1.35)
 
-    rens[0].ResetCameraClippingRange()
+    aRen.ResetCameraClippingRange()
 
     style = vtk.vtkInteractorStyleTrackballCamera()
     iren.SetInteractorStyle(style)
