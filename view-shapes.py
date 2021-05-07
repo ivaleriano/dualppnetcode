@@ -22,8 +22,8 @@ from typing import Tuple
 import nibabel as nib
 import numpy as np
 import vtk
-from vtk.util.numpy_support import vtk_to_numpy
 from vtk.numpy_interface import dataset_adapter as dsa
+from vtk.util.numpy_support import vtk_to_numpy
 
 COLOR_PALETTE = (
     # np.array([0.0, 0.0, 0.0]),
