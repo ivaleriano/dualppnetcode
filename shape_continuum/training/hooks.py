@@ -84,6 +84,7 @@ class CheckpointSaver(Hook):
     def after_step(self, outputs: Dict[str, Tensor]) -> None:
         if self._metrics is not None:
             self._forward("update", self._inputs, outputs)
+        self._inputs = None
 
     def on_begin_epoch(self) -> None:
         if self._metrics is not None:
@@ -166,6 +167,7 @@ class TensorBoardLogger(Hook):
 
     def after_step(self, outputs: Dict[str, Tensor]) -> None:
         self._forward("update", self._inputs, outputs)
+        self._inputs = None
 
     def _write_all(self):
         for m in self._metrics:
